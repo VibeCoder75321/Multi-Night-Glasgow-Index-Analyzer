@@ -9,9 +9,8 @@ A comprehensive tool for analyzing multiple nights of ResMed PAP data to calcula
 - **Trend Visualization**: Interactive charts showing Glasgow Index trends over time
 - **Component Analysis**: Detailed breakdown of all 9 Glasgow Index components
 - **Export Capabilities**: Export results to CSV or JSON formats
-- **Two Interface Options**: 
-  - Web-based interface (`multi_night_analyzer.html`)
-  - Desktop application (`glasgow_analyzer.py`)
+- **Web-based interface**: (`multi_night_analyzer.html`)
+
 
 ## Glasgow Index Components
 
@@ -40,19 +39,7 @@ The tool analyzes 9 key components of flow limitations:
 
 3. Select multiple BRP.edf files or drag and drop them onto the interface
 
-### Desktop Application
 
-1. Install Python 3.7 or higher
-
-2. Install required dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-3. Run the application:
-   ```bash
-   python glasgow_analyzer.py
-   ```
 
 ## Usage
 
@@ -217,4 +204,5 @@ This is not a medical product. It has not been reviewed or approved by any physi
 
 - Original Glasgow Index algorithm by DaveSkvn
 - EDF parsing based on European Data Format specification
+
 - ResMed for providing accessible data format on SD cards
