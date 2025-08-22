@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<title>Glasgow Index Intro</title>
+<link rel="shortcut icon" href="favicon.ico" type="image/x-icon" />
+<link rel="icon" href="favicon.ico" type="image/x-icon" />
+
+</head>
+<body style="font-family: sans-serif">
+<div style="margin:auto;max-width:900px;">
+  <h1>Glasgow Index</h1>
+  <h4>Visualisations of common flow limitations from Resmed S10 SD card flow data</h4>
+  <h3>Introduction</h3>
+  <p>The Glasgow Index Generator is intended as a tool for those using Resmed CPAP machines for some form
+   of sleep disordered breathing to review the data on the machine’s SD card. It focuses on the detail of “flow limitations”. 
+   It compliements but does not duplicate the functions of software such as OSCAR.</p>
+  <h3>Background</h3>
+  <p>Most people using CPAP machines will have been diagnosed with obstructive sleep apnea (OSA / OSAHS). The primary feature of OSA
+   is periodic apneas (complete ceasation of breathing) and hyponeas (partial ceasation of breathing). These will normally be accompanied 
+   by oxygen desaturations that lead to short arousals from sleep which in turn lead to daytime sleepiness. By looking for pauses in air flow
+    and oxygen desaturations it is fairly straightforward to diagnose OSA and detect and monitor events.</p>
+  <p>Apneas & hyponeas are not the only form of sleep disordered breathing that leads to daytime sleepiness. There is an ill-defined group of
+   less obvious sleep breathing problems that can have a similar effect. These are generally referred to as “flow limitations” (the term also
+    has a wider formal medical definition). Flow limitations have the same root cause as OSA (blockages in the upper airway during sleep) and
+     the same effect (daytime fatigue and sleepiness) but the mechanisms linking the two are different: breathing will not stop, there will
+      probably be no oxygen desaturation.</p>
+  <p>Once diagnosed with OSA an individual will be managed using the Apnea/Hypopnea Index (AHI). The AHI is the average number of apenas and hypopneas
+   experienced per hour. Once the AHI is below 5, the individual will be regarded as treated. It is possible that they will have additional sleep
+    disordered breathing that is not covered by the AHI, does not trigger oxygen desaturations but that leads to poor quality sleep and daytime
+     fatigue. In other words they can be using CPAP for a lengthy period of time, have an AHI of less than 5 and remain with “residual daytime
+      sleepiness”.</p>
+  <p>The Glasgow Index examines the flow rate data from a CPAP machine’s SD card and looks for the signatures of flow limitations. Each
+   inspiration is rated against 9 characteristics believed to be linked to flow limitation. If an inspiration/breath shows no signs of these
+    characteristics it will be given an index of 0. If it shows all of them (it can’t) it would be given an index of 9. The average index for
+     all inspirations in a data file is the “overall Glasgow Index”. An overall Glasgow index of between 0 and 0.2 would indicate good, clean
+      breathing. An index of 3 would indicate significant problems. You can look at the average index for each of the 9 characteristics 
+      individually to give an indication of where any problems lie.</p>
+  <h3>Limitations</h3>
+  <p>It should be stressed that the Glasgow Index is not a medical product. It has not been reviewed or approved by any physician or regulator.
+   It cannot be used to diagnose any form of sleep disordered breathing. It is intended for those making changes to their sleep routine and
+    looking to create a benchmark against which they can assess any improvements.</p> 
+  <p>The Glasgow Index is a crude measure. The overall index is just the 9 individual indices added together. There is no weighting to associate
+   relative importance (some of the characteristics will probably be more important that others to quality of sleep). There is also no equivalent
+    of the “AHI = 5”. One individual may not have daytime sleepiness with overall index = 1 whilst someone else may be unable to stay awake after
+     receiving the same index value.</p> 
+  <h3>Examples</h3>
+  <p>The following two examples are from the same individual on consecutive nights.</p> 
+  <p>The pressure was set to 12 cmH2O with no EPR (IPAP 12, EPAP 12). AHI was recorded as 0.53. The following morning included a nap to deal with fatigue.</p>
+  <p><img src="images/NoEPR.png" alt="Image of a heat map showing poor sleep breathing"/></p>
+  <p>The overall Glasgow index is 2.34. The variable amplitude index of 0.61 means that the height of inspirations were not settled and constant.
+   They varied from one breath to the next for most of the night. The inspirations were skewed to left or right. With good breathing they tend
+    to be symetrical. Many of the breaths had double peaks, particularly at the beginning of the night. Again this is not typically seen in
+     orderly breathing. </p>
+  <p>The following night the EPR was set to 3 (IPAP 12, EPAP 9). AHI was recorded as 0.86. The following morning did not include a nap.</p>
+  <p><img src="images/EPR3.png"  alt="Image of a heat map showing moderate sleep breathing"/></p>
+  <p>The overall Glasgow Index is 1.03. Whilst still a bit variable at times, the amplitude of inspirations is more stable. The problem with
+   skew is much reduced. There are fewer double peaks but they are far from eliminated.</p>
+  <h3>Characteristics</h3>
+  <table border="1">
+  <thead>
+  <tr>
+  <th>Characteristic</th>
+  <th>Description / Definition</th>
+  <th>Example</th>
+  </tr>
+  </thead>
+  <tbody>
+  <tr>
+  <td><b>Skew</b></td>
+  <td><p>Is the inspiration balanced (good) or skewed to left or right? (sometimes called a class 4 or 6 flow limitation)</p><p><b>Abnormal:</b> 55% of the flow volume has to be on one side of the mid point.</p></td>
+  <td><img src="images/Skew.png" alt="Image of a skewed inspiration"/></td>
+  </tr>
+  <tr>
+  <td><b>Spike</b></td>
+  <td><p>Is the inspiration unexpectedly tall and thin?</p><p><b>Abnormal:</b>The trace spends less than 20% of its time above 90% of the peak value. 
+  For a parabola it would be expected to be 31.6%, for a sine wave, 28.7%.</p></td>
+  <td><img src="images/Spike.png" alt="Image of a spiked inspiration"/></td>
+  </tr>
+  <tr>
+  <td><b>Flat Top</b></td>
+  <td><p>Is the top of the inspiration flat? (sometimes called a class 7 flow limitation)</p><p><b>Abnormal:</b> Look at the middle 50% of the inspiration. Calculate the variance from the mean
+   value. If it is below 0.75, the inspiration is “flat”.</p></td>
+  <td><img src="images/FlatTop.png" alt="Image of a flat topped inspiration"/></td>
+  </tr>
+  <tr>
+  <td><b>Top Heavy</b></td>
+  <td><p>Does the trace spend an unexpected amount of time at high values? Similar to Flat Top but does not require the top to be pancake flat. </p>
+  <p><b>Abnormal:</b> The trace spends more than 40% of its time above 90% of the peak value. For a parabola it would be expected to be 31.6%, for a sine wave, 28.7%.</p></td>
+  <td><img src="images/TopHeavy.png" alt="Image of a top heavy inspiration"/></td>
+  </tr>
+  <tr>
+  <td><b>Double Peak</b></td>
+  <td><p>Ideal breathing has a single smooth peak. Two peaks, typically at either end of a plateau, is a sign of disordered breathing. (sometimes called a class 2 flow limitation)</p>
+  <p><b>Abnormal:</b> Search the inspiration curve for a maximum and continue searching for another peak with a value more than 1 unit over an intermediate low.</p></td>
+  <td><img src="images/DoublePeak.png" alt="Image of a double peak inspiration"/></td>
+  </tr>
+  <tr>
+  <td><b>No Pause</b></td>
+  <td><p>Relaxed breathing has inspiration followed immediately by expiration and a pause. Sometimes expiration goes straight into the next inspiration without a pause. </p>
+  <p><b>Abnormal:</b> Use the first second of expiration to extrapolate an “end” to the expiration. If this end is 0.4s or less from the start of the next inspiration (normally more than 1s), flag a ‘no pause’.</p></td>
+  <td><img src="images/NoPause.png" alt="Image of a inspiration without pre-pause"/></td>
+  </tr>
+  <tr>
+  <td><b>Inspir Rate</b></td>
+  <td colspan="2"><p>Normally breathing rate is between 12 and 20 breaths per minute.</p>
+  <p><b>Abnormal:</b> Calculate the inspiration rate using the time for the “last 5 inspirations”. Flag when above 20 inspirations per minute.</p>
+  <p><img src="images/InspirationRate.png" alt="Image of rapid inspiration rate"/></p></td>
+  </tr>
+  <tr>
+  <td><b>Double inspiration</b></td>
+  <td><p>In some disordered breathing there can be multiple inspirations for each full expiration. </p>
+  <p><b>Abnormal:</b> Allocate each inspiration to an expiration. Any additional inspirations remaining are “double inspirations”.</p></td>
+  <td><img src="images/DoubleInspiration.png" alt="Image of a double inspiration for a single expiration"/></td>
+  </tr>
+  <tr>
+  <td><b>Variable Amplitude</b></td>
+  <td colspan="2"><p>Orderly breathing will have a broadly stable amplitude.  </p>
+  <p><b>Abnormal:</b> For each inspiration, look at the previous 4, calculate the mean amplitude and calculate the variance from it. If the variance is over 4, flag variable amplitude. </p>
+  <p><img src="images/VariableAmplitude.png" alt="Image of variable amplitude breathing"/></p></td>
+  
+  </tr>
+  
+  
+  
+  
+  
+  
+  </tbody>
+  </table>
+  
+  <h3>Operation</h3>
+<p>Open the <a href="FlowLimits.html" target="_blank">Glasgow Index web page</a> and click on the “Browse” button. Nagivate to the file to be examined. This should have the name &lt;DATE&gt;_&lt;TIME&gt;_BRP.edf.</p> 
+<p>On the SD card from the Resmed CPAP machine look in the DATALOG directory under the subdirectory for the day you are interested in.</p>
+<p>If you have been using OSCAR software to review CPAP activity, navigate to the base directory (found on the “Help→Troubleshooting → System Information” pop-up screen) and then move to<p> 
+<p>&lt;BASE_DIR&gt;/Profiles/&lt;YOUR_PROFILE_NAME&gt;/ResMed_&lt;YOUR_SERIAL_NO&gt;/Backup/DATALOG/&lt;YEAR&gt;
+<p>The flow rate data is held in the *BRP.edf files. There is one file for each CPAP session. That is for each time the machine is switched on – not for each night.</p>
+<p>The web browser should read in the file, perform the required calculations and display the heat map as shown above.</p>
+<p>The session average of the index for each characteristic is displayed after the text at the start of each line.</p> 
+<p>Breaths are grouped into “cells” (The number of breaths in each cell depends on the length of the CPAP session and the width of the
+ available screen). The average index value for the cell is calculated and displayed as a vertical line one pixel wide. The values for each cell are
+  displayed next to each other to form the heat map. Higher indices (indicating worse breathing) are shown in darker colours. Lower indices (indicating
+   better breathing) are shown in ligher shades.</p> 
+<p>The more white that is visible in the heat map the better.</p>
+<p>For each cell, the index for all the characteristics is added up and displayed in the bottom strip as the overall index. This may also include thick
+ black lines. This is where the inspiration volume does not match the expiration volume (with a 20% margin of error) and normally shows locations of
+  very poor breathing. This can be the likes of mask leaks, coughing or aerophagia.</p>
+<p>The user can click on a location in the heat map and see the detail flow rate graph below. The vertical and horizontal scaling is fixed so that each
+ time a cell is selected the user is presented with readily comparible data. At times this may lead to data being lost off the top/bottom of the screen.
+  There are back / forward buttons available to move through the flow rate data. A thin red “idealized inspiration” is shown to aid in comparison. This
+   should not be seen as a realistic, achieveable goal but just as a visual aid.</p>
+
+  <h3>Notes</h3>
+<p>The role of “flow limitations” in daytime sleepiness has been noted for a considerable time. See 
+<a href="https://www.sciencedirect.com/science/article/pii/S1984006315000516#f0015">this paper</a> from 2015 citing a number of previous studies.
+It is noted in that the pressures best suited to treat flow limitations in an individual are often lower then those for apnea/hypopnea. 
+This could give rise to a tension between treating flow limitiations and OSA.</p> 
+<p>CPAP machines are generally developed to focus on apena / hypopneas. Their algoritm my include some form of “flow limitiation index” but
+ this can be tailored to focus on managing apena / hypopneas rather than limiting flow limitiations themselves. A discussion from 2015 of 
+ <a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC4629962/">CPAP algoritms (includes Resmed S10) can be found here</a>.
+<p>It seems using bi level PAP / pressure support, by its nature, often helps flow-limitiation-based disordered breathing. Basic CPAP
+ machines only provide a limited level of pressure support. It may be helpful for those with flow limitation issues to consider the use of
+  a bi level machine but this is not currently standard medical practice.</p> 
+<p>&copy; 2025 DaveSkvn </p>
+</div>
+
+</body>
+</html>

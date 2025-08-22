@@ -1,0 +1,1281 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<title>Multi-Night Glasgow Index Analyzer</title>
+<link rel="shortcut icon" href="favicon.ico" type="image/x-icon" />
+<link rel="icon" href="favicon.ico" type="image/x-icon" />
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+<script src="EDFFile.js"></script>
+<script src="FlowLimits.js"></script>
+
+<style>
+    body {
+        font-family: sans-serif;
+        margin: 20px;
+        background-color: #f5f5f5;
+    }
+    
+    .container {
+        max-width: 1200px;
+        margin: 0 auto;
+        background-color: white;
+        padding: 20px;
+        border-radius: 10px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    
+    .header {
+        text-align: center;
+        margin-bottom: 30px;
+        border-bottom: 2px solid #e0e0e0;
+        padding-bottom: 20px;
+    }
+    
+    .upload-section {
+        background-color: #f9f9f9;
+        padding: 20px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+        border: 2px dashed #ccc;
+    }
+    
+    .upload-section.drag-over {
+        border-color: #007bff;
+        background-color: #e7f3ff;
+    }
+    
+    .results-section {
+        display: none;
+        margin-top: 20px;
+    }
+    
+    .summary-cards {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 15px;
+        margin-bottom: 20px;
+    }
+    
+    .summary-card {
+        background-color: #f8f9fa;
+        padding: 15px;
+        border-radius: 8px;
+        border-left: 4px solid #007bff;
+        text-align: center;
+    }
+    
+    .summary-card h3 {
+        margin: 0 0 10px 0;
+        color: #333;
+        font-size: 14px;
+    }
+    
+    .summary-card .value {
+        font-size: 24px;
+        font-weight: bold;
+        color: #007bff;
+    }
+    
+    .chart-container {
+        background-color: white;
+        padding: 20px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+        box-shadow: 0 1px 5px rgba(0,0,0,0.1);
+    }
+    
+    .night-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 20px;
+        background-color: white;
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow: 0 1px 5px rgba(0,0,0,0.1);
+    }
+    
+    .night-table th,
+    .night-table td {
+        padding: 12px;
+        text-align: left;
+        border-bottom: 1px solid #e0e0e0;
+    }
+    
+    .night-table th {
+        background-color: #007bff;
+        color: white;
+        font-weight: bold;
+    }
+    
+    .night-table tr:hover {
+        background-color: #f8f9fa;
+    }
+    
+    .progress-bar {
+        width: 100%;
+        height: 20px;
+        background-color: #e0e0e0;
+        border-radius: 10px;
+        overflow: hidden;
+        margin: 10px 0;
+    }
+    
+    .progress-fill {
+        height: 100%;
+        background-color: #007bff;
+        transition: width 0.3s ease;
+    }
+    
+    .file-count {
+        margin: 10px 0;
+        color: #666;
+    }
+    
+    .gi-value {
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-weight: bold;
+    }
+    
+    .gi-excellent { background-color: #d4edda; color: #155724; }
+    .gi-good { background-color: #d1ecf1; color: #0c5460; }
+    .gi-fair { background-color: #fff3cd; color: #856404; }
+    .gi-poor { background-color: #f8d7da; color: #721c24; }
+    .gi-very-poor { background-color: #f5c6cb; color: #491217; }
+</style>
+
+</head>
+<body>
+
+<div class="container">
+    <div class="header">
+        <h1>Multi-Night Glasgow Index Analyzer</h1>
+        <p>Analyze multiple nights of ResMed PAP data to track Glasgow Index trends and component analysis</p>
+    </div>
+    
+          <div class="upload-section" id="uploadSection">
+          <h3>Upload DATALOG Folder</h3>
+          <p>Upload your ResMed SD card data - select entire DATALOG folder for easiest analysis:</p>
+          
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin: 20px 0;">
+              <div style="text-align: center; padding: 20px; border: 2px dashed #007bff; border-radius: 8px; background: #f8f9ff;">
+                  <h4 style="margin-top: 0; color: #007bff;">📁 Upload DATALOG Folder</h4>
+                  <p style="font-size: 14px; color: #666; margin-bottom: 15px;">Select your entire DATALOG folder from SD card</p>
+                  <input type="file" id="folderInput" webkitdirectory multiple style="margin: 10px 0;">
+                  <div style="font-size: 12px; color: #888; margin-top: 10px;">
+                      <strong>Recommended:</strong> Select the DATALOG folder (contains all your nights)
+                  </div>
+              </div>
+              
+              <div style="text-align: center; padding: 20px; border: 2px dashed #28a745; border-radius: 8px; background: #f8fff8;">
+                  <h4 style="margin-top: 0; color: #28a745;">📄 Upload Individual Files</h4>
+                  <p style="font-size: 14px; color: #666; margin-bottom: 15px;">Select individual BRP.edf files</p>
+                  <input type="file" name="inputfiles" id="fileInput" multiple accept=".edf" style="margin: 10px 0;">
+                  <div style="font-size: 12px; color: #888; margin-top: 10px;">
+                      <strong>Alternative:</strong> If you prefer to select files manually
+                  </div>
+              </div>
+          </div>
+          
+          <div style="text-align: center; margin: 15px 0; padding: 15px; background: #e7f3ff; border-radius: 8px; border-left: 4px solid #007bff;">
+              <p style="margin: 0; font-size: 14px;">
+                  <strong>💡 How to upload DATALOG folder:</strong> Navigate to your ResMed SD card, find the DATALOG folder, click "Choose Files", then select the DATALOG folder and click "Upload"
+              </p>
+          </div>
+          
+          <div class="file-count" id="fileCount">No files selected</div>
+          <div class="progress-bar" id="progressBar" style="display: none;">
+              <div class="progress-fill" id="progressFill"></div>
+          </div>
+          <div id="processingStatus"></div>
+      </div>
+    
+    <div class="results-section" id="resultsSection">
+        <div class="summary-cards">
+            <div class="summary-card">
+                <h3>Nights Analyzed</h3>
+                <div class="value" id="nightsCount">0</div>
+            </div>
+            <div class="summary-card">
+                <h3>Average Overall GI</h3>
+                <div class="value" id="avgOverallGI">0.00</div>
+            </div>
+            <div class="summary-card">
+                <h3>Best Night GI</h3>
+                <div class="value" id="bestNightGI">0.00</div>
+            </div>
+            <div class="summary-card">
+                <h3>Worst Night GI</h3>
+                <div class="value" id="worstNightGI">0.00</div>
+            </div>
+        </div>
+        
+        <div class="chart-container">
+            <h3>Glasgow Index Trends Over Time</h3>
+            <div style="margin-bottom: 15px;">
+                <label for="dateRangeSelect">Date Range:</label>
+                <select id="dateRangeSelect" style="margin: 0 10px; padding: 5px;">
+                    <option value="all">All Data</option>
+                    <option value="30">Last 30 Days</option>
+                    <option value="60">Last 60 Days</option>
+                    <option value="90">Last 90 Days</option>
+                </select>
+                
+                <label for="smoothingSelect">Smoothing:</label>
+                <select id="smoothingSelect" style="margin: 0 10px; padding: 5px;">
+                    <option value="none">None</option>
+                    <option value="3">3-day Moving Average</option>
+                    <option value="7">7-day Moving Average</option>
+                    <option value="14">14-day Moving Average</option>
+                </select>
+                
+                <button onclick="updateAllCharts()" style="padding: 5px 15px;">Update Charts</button>
+            </div>
+            <div style="position: relative; height: 400px; width: 100%;">
+                <canvas id="trendsChart"></canvas>
+            </div>
+        </div>
+        
+        <div class="chart-container">
+            <h3>Component Analysis</h3>
+            <div style="margin-bottom: 15px;">
+                <label>
+                    <input type="checkbox" id="showTrendLines" checked onchange="updateComponentsChart()"> 
+                    Show Trend Lines
+                </label>
+            </div>
+            
+            <!-- Component Filter Panel -->
+            <div id="componentFilter" style="background: #f8f9fa; padding: 15px; border-radius: 5px; margin-bottom: 15px; border: 1px solid #dee2e6;">
+                <div style="font-weight: bold; margin-bottom: 10px;">Select Components to Display:</div>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; margin-bottom: 10px;">
+                    <label style="font-size: 13px;"><input type="checkbox" id="comp_skew" checked onchange="updateComponentsChart()"> Skew</label>
+                    <label style="font-size: 13px;"><input type="checkbox" id="comp_spike" checked onchange="updateComponentsChart()"> Spike</label>
+                    <label style="font-size: 13px;"><input type="checkbox" id="comp_flatTop" checked onchange="updateComponentsChart()"> Flat Top</label>
+                    <label style="font-size: 13px;"><input type="checkbox" id="comp_topHeavy" checked onchange="updateComponentsChart()"> Top Heavy</label>
+                    <label style="font-size: 13px;"><input type="checkbox" id="comp_multiPeak" checked onchange="updateComponentsChart()"> Multi Peak</label>
+                    <label style="font-size: 13px;"><input type="checkbox" id="comp_noPause" checked onchange="updateComponentsChart()"> No Pause</label>
+                    <label style="font-size: 13px;"><input type="checkbox" id="comp_inspirRate" checked onchange="updateComponentsChart()"> Inspir Rate</label>
+                    <label style="font-size: 13px;"><input type="checkbox" id="comp_multiBreath" checked onchange="updateComponentsChart()"> Multi Breath</label>
+                    <label style="font-size: 13px;"><input type="checkbox" id="comp_ampVar" checked onchange="updateComponentsChart()"> Variable Amp</label>
+                </div>
+                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                    <button onclick="selectAllComponents()" style="padding: 4px 8px; font-size: 12px; background: #28a745; color: white; border: none; border-radius: 3px;">All</button>
+                    <button onclick="selectNoComponents()" style="padding: 4px 8px; font-size: 12px; background: #dc3545; color: white; border: none; border-radius: 3px;">None</button>
+                    <button onclick="selectMainComponents()" style="padding: 4px 8px; font-size: 12px; background: #007bff; color: white; border: none; border-radius: 3px;">Main Issues</button>
+                    <button onclick="selectFlowComponents()" style="padding: 4px 8px; font-size: 12px; background: #6f42c1; color: white; border: none; border-radius: 3px;">Flow Shape</button>
+                    <button onclick="selectTimingComponents()" style="padding: 4px 8px; font-size: 12px; background: #fd7e14; color: white; border: none; border-radius: 3px;">Timing</button>
+                </div>
+            </div>
+            
+            <div style="position: relative; height: 400px; width: 100%;">
+                <canvas id="componentsChart"></canvas>
+            </div>
+        </div>
+        
+        <h3>Detailed Night-by-Night Results</h3>
+        <table class="night-table" id="resultsTable">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Start Time</th>
+                    <th>Duration (hrs)</th>
+                    <th>Overall GI</th>
+                    <th>Skew</th>
+                    <th>Spike</th>
+                    <th>Flat Top</th>
+                    <th>Top Heavy</th>
+                    <th>Multi Peak</th>
+                    <th>No Pause</th>
+                    <th>Inspir Rate</th>
+                    <th>Multi Breath</th>
+                    <th>Variable Amp</th>
+                </tr>
+            </thead>
+            <tbody id="resultsTableBody">
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script type="text/javascript">
+
+let nightlyResults = [];
+let trendsChart = null;
+let componentsChart = null;
+
+// File handling
+document.getElementById('fileInput').addEventListener('change', function (event) {
+    const files = Array.from(event.target.files);
+    handleFiles(files);
+});
+
+// Folder handling
+document.getElementById('folderInput').addEventListener('change', function (event) {
+    const files = Array.from(event.target.files);
+    handleFiles(files);
+});
+
+// Enhanced drag and drop functionality
+const uploadSection = document.getElementById('uploadSection');
+
+uploadSection.addEventListener('dragover', function(e) {
+    e.preventDefault();
+    uploadSection.classList.add('drag-over');
+});
+
+uploadSection.addEventListener('dragleave', function(e) {
+    e.preventDefault();
+    uploadSection.classList.remove('drag-over');
+});
+
+uploadSection.addEventListener('drop', function(e) {
+    e.preventDefault();
+    uploadSection.classList.remove('drag-over');
+    
+    const files = [];
+    const items = e.dataTransfer.items;
+    
+    if (items) {
+        // Handle both files and directories
+        const promises = [];
+        
+        for (let i = 0; i < items.length; i++) {
+            const item = items[i];
+            if (item.kind === 'file') {
+                const entry = item.webkitGetAsEntry();
+                if (entry) {
+                    promises.push(processEntry(entry));
+                }
+            }
+        }
+        
+        Promise.all(promises).then(results => {
+            const allFiles = results.flat().filter(file => file.name.endsWith('.edf'));
+            if (allFiles.length > 0) {
+                handleFiles(allFiles);
+            } else {
+                alert('No EDF files found in the dropped items. Please ensure you\'re dropping folders containing ResMed data or individual EDF files.');
+            }
+        });
+    } else {
+        // Fallback for browsers that don't support webkitGetAsEntry
+        const fileList = Array.from(e.dataTransfer.files).filter(file => file.name.endsWith('.edf'));
+        if (fileList.length > 0) {
+            handleFiles(fileList);
+        }
+    }
+});
+
+// Process directory entries recursively
+function processEntry(entry) {
+    return new Promise((resolve) => {
+        if (entry.isFile) {
+            entry.file(resolve);
+        } else if (entry.isDirectory) {
+            const dirReader = entry.createReader();
+            dirReader.readEntries((entries) => {
+                const promises = entries.map(processEntry);
+                Promise.all(promises).then(results => {
+                    resolve(results.flat());
+                });
+            });
+        }
+    });
+}
+
+function handleFiles(files) {
+    const brpFiles = files.filter(file => file.name.includes('_BRP.edf'));
+    const allEdfFiles = files.filter(file => file.name.endsWith('.edf'));
+    
+    if (brpFiles.length === 0) {
+        if (allEdfFiles.length > 0) {
+            const otherTypes = allEdfFiles.map(f => {
+                if (f.name.includes('_PLD.edf')) return 'PLD (pressure data)';
+                if (f.name.includes('_SAD.edf')) return 'SAD (summary data)';
+                if (f.name.includes('_EVE.edf')) return 'EVE (event data)';
+                return 'unknown type';
+            });
+            
+            alert(`Found ${allEdfFiles.length} EDF files, but none are BRP (breathing) files needed for analysis.\n\nFound: ${[...new Set(otherTypes)].join(', ')}\n\nPlease ensure your folders contain BRP.edf files from your ResMed device.`);
+        } else {
+            alert('No EDF files found. Please select folders containing ResMed data or individual BRP.edf files.');
+        }
+        return;
+    }
+    
+    // Group files by night to show better summary
+    const nightGroups = {};
+    brpFiles.forEach(file => {
+        const match = file.name.match(/(\d{8})_/);
+        if (match) {
+            const date = match[1];
+            if (!nightGroups[date]) nightGroups[date] = 0;
+            nightGroups[date]++;
+        }
+    });
+    
+    const nightCount = Object.keys(nightGroups).length;
+    const sessionCount = brpFiles.length;
+    
+    let countText = `Found ${sessionCount} breathing data files from ${nightCount} night${nightCount !== 1 ? 's' : ''}`;
+    
+    if (allEdfFiles.length > brpFiles.length) {
+        const otherCount = allEdfFiles.length - brpFiles.length;
+        countText += ` (${otherCount} other EDF files ignored)`;
+    }
+    
+    // Show which nights were found
+    if (nightCount <= 10) {
+        const nightDates = Object.keys(nightGroups).sort().map(date => {
+            const sessionCount = nightGroups[date];
+            const formattedDate = `${date.slice(0,4)}-${date.slice(4,6)}-${date.slice(6,8)}`;
+            return sessionCount > 1 ? `${formattedDate} (${sessionCount} sessions)` : formattedDate;
+        });
+        countText += `\n\nNights: ${nightDates.join(', ')}`;
+    }
+    
+    document.getElementById('fileCount').textContent = countText;
+    processFiles(brpFiles);
+}
+
+async function processFiles(files) {
+    nightlyResults = [];
+    
+    const progressBar = document.getElementById('progressBar');
+    const progressFill = document.getElementById('progressFill');
+    const processingStatus = document.getElementById('processingStatus');
+    
+    progressBar.style.display = 'block';
+    
+    for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const progress = ((i + 1) / files.length) * 100;
+        progressFill.style.width = progress + '%';
+        processingStatus.textContent = `Processing ${file.name}...`;
+        
+        try {
+            const result = await processFile(file);
+            if (result) {
+                nightlyResults.push(result);
+            }
+        } catch (error) {
+            console.error(`Error processing ${file.name}:`, error);
+        }
+        
+        // Small delay to allow UI to update
+        await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    
+    progressBar.style.display = 'none';
+    processingStatus.textContent = '';
+    
+    if (nightlyResults.length > 0) {
+        displayResults();
+    } else {
+        alert('No files could be processed successfully');
+    }
+}
+
+function processFile(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        
+        reader.onload = function(event) {
+            try {
+                const arrayBuffer = event.target.result;
+                const result = analyzeFile(arrayBuffer, file.name);
+                resolve(result);
+            } catch (error) {
+                console.error(`Error processing file ${file.name}:`, error);
+                resolve(null);
+            }
+        };
+        
+        reader.onerror = function() {
+            reject(new Error(`Failed to read file ${file.name}`));
+        };
+        
+        reader.readAsArrayBuffer(file);
+    });
+}
+
+function analyzeFile(arrayBuffer, fileName) {
+    // Parse EDF file
+    const fileData = parseEDFFile(arrayBuffer);
+    if (fileData.formatVersion !== "0") {
+        throw new Error("Incorrect file format");
+    }
+    
+    // Extract flow data
+    const dataArray = formDataArray(fileData);
+    if (!dataArray || dataArray.length === 0) {
+        throw new Error("No flow data found");
+    }
+    
+    // Run Glasgow Index analysis
+    const results = {};
+    
+    findMins(dataArray);
+    findInspirations(dataArray, results);
+    calcCycleBasedIndicators(dataArray, results);
+    prepIdealFlow(dataArray, results);
+    inspirationAmplitude(dataArray, results);
+    results.cumIndex = prepIndices(results);
+    
+    // Calculate session duration in hours
+    const durationMs = dataArray.length * 40; // 40ms per sample
+    const durationHours = durationMs / (1000 * 60 * 60);
+    
+    // Extract date and time from filename
+    const match = fileName.match(/(\d{8})_(\d{6})_BRP\.edf/);
+    let date = 'Unknown';
+    let time = 'Unknown';
+    
+    if (match) {
+        const dateStr = match[1];
+        const timeStr = match[2];
+        
+        date = `${dateStr.slice(0,4)}-${dateStr.slice(4,6)}-${dateStr.slice(6,8)}`;
+        time = `${timeStr.slice(0,2)}:${timeStr.slice(2,4)}:${timeStr.slice(4,6)}`;
+    }
+    
+    return {
+        fileName: fileName,
+        date: date,
+        time: time,
+        startDateTime: fileData.startDateTime,
+        duration: durationHours,
+        cumIndex: results.cumIndex,
+        inspirationCount: results.inspirations ? results.inspirations.length : 0
+    };
+}
+
+function displayResults() {
+    // Sort results by date/time
+    nightlyResults.sort((a, b) => new Date(a.startDateTime) - new Date(b.startDateTime));
+    
+    // Group by night (same date, combine sessions)
+    const nightlyData = groupByNight(nightlyResults);
+    
+    // Update summary cards
+    updateSummaryCards(nightlyData);
+    
+    // Create charts
+    createTrendsChart(nightlyData);
+    createComponentsChart(nightlyData);
+    
+    // Create results table
+    createResultsTable(nightlyData);
+    
+    // Show results section
+    document.getElementById('resultsSection').style.display = 'block';
+}
+
+function groupByNight(results) {
+    const grouped = {};
+    
+    results.forEach(result => {
+        // Convert sessions to sleep nights
+        // Sessions starting between 6 PM and 11:59 PM belong to that date's night
+        // Sessions starting between 12:00 AM and 11:59 AM belong to previous date's night
+        const sessionDateTime = new Date(result.startDateTime);
+        const sessionHour = sessionDateTime.getHours();
+        
+        let sleepNightDate;
+        if (sessionHour >= 18) {
+            // Evening session (6 PM - 11:59 PM) - belongs to current date's night
+            sleepNightDate = result.date;
+        } else if (sessionHour < 12) {
+            // Morning session (12:00 AM - 11:59 AM) - belongs to previous date's night
+            const prevDate = new Date(sessionDateTime);
+            prevDate.setDate(prevDate.getDate() - 1);
+            sleepNightDate = prevDate.toISOString().split('T')[0];
+        } else {
+            // Afternoon session (12:00 PM - 5:59 PM) - unusual, but belongs to current date
+            sleepNightDate = result.date;
+        }
+        
+        if (!grouped[sleepNightDate]) {
+            grouped[sleepNightDate] = [];
+        }
+        grouped[sleepNightDate].push(result);
+    });
+    
+    // Calculate weighted averages for each night
+    const nightlyData = [];
+    
+    Object.keys(grouped).forEach(sleepNightDate => {
+        const sessions = grouped[sleepNightDate];
+        const totalDuration = sessions.reduce((sum, s) => sum + s.duration, 0);
+        
+        // Calculate weighted averages
+        const weightedGI = {
+            overall: 0,
+            skew: 0,
+            spike: 0,
+            flatTop: 0,
+            topHeavy: 0,
+            multiPeak: 0,
+            noPause: 0,
+            inspirRate: 0,
+            multiBreath: 0,
+            ampVar: 0
+        };
+        
+        sessions.forEach(session => {
+            const weight = session.duration / totalDuration;
+            weightedGI.overall += session.cumIndex.overall * weight;
+            weightedGI.skew += session.cumIndex.skew * weight;
+            weightedGI.spike += session.cumIndex.spike * weight;
+            weightedGI.flatTop += session.cumIndex.flatTop * weight;
+            weightedGI.topHeavy += session.cumIndex.topHeavy * weight;
+            weightedGI.multiPeak += session.cumIndex.multiPeak * weight;
+            weightedGI.noPause += session.cumIndex.noPause * weight;
+            weightedGI.inspirRate += session.cumIndex.inspirRate * weight;
+            weightedGI.multiBreath += session.cumIndex.multiBreath * weight;
+            weightedGI.ampVar += session.cumIndex.ampVar * weight;
+        });
+        
+        // Round to 2 decimal places
+        Object.keys(weightedGI).forEach(key => {
+            weightedGI[key] = Math.round(weightedGI[key] * 100) / 100;
+        });
+        
+        // Sort sessions by start time to get the earliest session time
+        sessions.sort((a, b) => new Date(a.startDateTime) - new Date(b.startDateTime));
+        
+        nightlyData.push({
+            date: sleepNightDate,
+            startTime: sessions[0].time,
+            duration: totalDuration,
+            sessions: sessions.length,
+            weightedGI: weightedGI
+        });
+    });
+    
+    return nightlyData.sort((a, b) => new Date(b.date) - new Date(a.date)); // Most recent first
+}
+
+function updateSummaryCards(nightlyData) {
+    document.getElementById('nightsCount').textContent = nightlyData.length;
+    
+    if (nightlyData.length > 0) {
+        const avgOverall = nightlyData.reduce((sum, night) => sum + night.weightedGI.overall, 0) / nightlyData.length;
+        const bestNight = Math.min(...nightlyData.map(night => night.weightedGI.overall));
+        const worstNight = Math.max(...nightlyData.map(night => night.weightedGI.overall));
+        
+        document.getElementById('avgOverallGI').textContent = avgOverall.toFixed(2);
+        document.getElementById('bestNightGI').textContent = bestNight.toFixed(2);
+        document.getElementById('worstNightGI').textContent = worstNight.toFixed(2);
+    }
+}
+
+function createTrendsChart(nightlyData) {
+    window.originalNightlyData = nightlyData; // Store for filtering
+    // Small delay to ensure DOM is ready and prevent resize loops
+    setTimeout(() => {
+        updateTrendsChart();
+    }, 100);
+}
+
+function updateAllCharts() {
+    updateTrendsChart();
+    updateComponentsChart();
+}
+
+function updateTrendsChart() {
+    const ctx = document.getElementById('trendsChart').getContext('2d');
+    
+    if (trendsChart) {
+        trendsChart.destroy();
+    }
+    
+    // Get filter settings
+    const dateRange = document.getElementById('dateRangeSelect').value;
+    const smoothing = document.getElementById('smoothingSelect').value;
+    
+    // Filter data by date range
+    let filteredData = filterByDateRange(window.originalNightlyData, dateRange);
+    
+    // Sort chronologically for proper trend visualization
+    filteredData.sort((a, b) => new Date(a.date) - new Date(b.date));
+    
+    // Apply smoothing
+    const smoothedData = applySmoothing(filteredData, smoothing);
+    
+    const labels = smoothedData.map(night => night.date);
+    const overallData = smoothedData.map(night => night.weightedGI.overall);
+    
+    // Calculate trend line
+    const trendLine = calculateLinearTrend(overallData);
+    
+    // Create datasets
+    const datasets = [{
+        label: 'Overall Glasgow Index',
+        data: overallData,
+        borderColor: '#007bff',
+        backgroundColor: 'rgba(0, 123, 255, 0.1)',
+        borderWidth: 3,
+        fill: true,
+        tension: 0.2,
+        pointRadius: 5,
+        pointHoverRadius: 8
+    }];
+    
+    // Add trend line
+    if (smoothedData.length > 2) {
+        datasets.push({
+            label: 'Trend Line',
+            data: trendLine,
+            borderColor: '#dc3545',
+            backgroundColor: 'transparent',
+            borderWidth: 2,
+            borderDash: [5, 5],
+            fill: false,
+            pointRadius: 0,
+            tension: 0
+        });
+    }
+    
+    // Calculate smart Y-axis scaling
+    const maxGI = Math.max(...overallData);
+    const minGI = Math.min(...overallData);
+    const dataRange = maxGI - minGI;
+    
+    // Smart scaling based on data range
+    let yMax;
+    if (maxGI <= 0.5) {
+        yMax = Math.ceil(maxGI * 10) / 10 + 0.1; // Round up to nearest 0.1 + buffer
+    } else if (maxGI <= 1.0) {
+        yMax = Math.ceil(maxGI * 4) / 4 + 0.25; // Round up to nearest 0.25 + buffer
+    } else if (maxGI <= 2.0) {
+        yMax = Math.ceil(maxGI * 2) / 2 + 0.5; // Round up to nearest 0.5 + buffer
+    } else if (maxGI <= 4.0) {
+        yMax = Math.ceil(maxGI) + 1; // Round up to nearest integer + buffer
+    } else {
+        yMax = Math.ceil(maxGI * 1.25); // 25% buffer for high values
+    }
+    
+    // Ensure minimum range for visual clarity
+    if (dataRange < 0.2 && maxGI < 2.0) {
+        yMax = Math.max(yMax, maxGI + 0.3);
+    }
+    
+    trendsChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: datasets
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            resizeDelay: 0,
+            animation: {
+                duration: 0
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    max: yMax,
+                    title: {
+                        display: true,
+                        text: 'Glasgow Index',
+                        font: { size: 14, weight: 'bold' }
+                    },
+                    ticks: {
+                        callback: function(value) {
+                            // Dynamic precision based on range
+                            if (yMax <= 1.0) {
+                                return value.toFixed(2);
+                            } else if (yMax <= 3.0) {
+                                return value.toFixed(1);
+                            } else {
+                                return value.toFixed(0);
+                            }
+                        },
+                        stepSize: function() {
+                            // Dynamic step size based on range
+                            if (yMax <= 0.5) return 0.1;
+                            if (yMax <= 1.0) return 0.2;
+                            if (yMax <= 2.0) return 0.5;
+                            if (yMax <= 5.0) return 1.0;
+                            return 2.0;
+                        }()
+                    },
+                    grid: {
+                        color: function(context) {
+                            // Color-code quality zones
+                            const value = context.tick.value;
+                            if (value <= 0.2) return 'rgba(40, 167, 69, 0.2)'; // Excellent
+                            if (value <= 1.0) return 'rgba(23, 162, 184, 0.2)'; // Good
+                            if (value <= 2.0) return 'rgba(255, 193, 7, 0.2)'; // Fair
+                            if (value <= 3.0) return 'rgba(220, 53, 69, 0.2)'; // Poor
+                            return 'rgba(108, 117, 125, 0.2)'; // Very Poor
+                        }
+                    }
+                },
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Date',
+                        font: { size: 14, weight: 'bold' }
+                    },
+                    ticks: {
+                        maxTicksLimit: 12,
+                        callback: function(value, index) {
+                            const date = new Date(this.getLabelForValue(value));
+                            return date.toLocaleDateString('en-US', { 
+                                month: 'short', 
+                                day: 'numeric' 
+                            });
+                        }
+                    }
+                }
+            },
+            plugins: {
+                title: {
+                    display: true,
+                    text: `Glasgow Index Trend ${getDateRangeTitle(dateRange)} ${getSmoothingTitle(smoothing)}`,
+                    font: { size: 16, weight: 'bold' }
+                },
+                legend: {
+                    display: true,
+                    position: 'top'
+                },
+                tooltip: {
+                    callbacks: {
+                        title: function(context) {
+                            return `Night: ${context[0].label}`;
+                        },
+                        afterLabel: function(context) {
+                            const gi = context.parsed.y;
+                            let quality = 'Very Poor';
+                            if (gi <= 0.2) quality = 'Excellent';
+                            else if (gi <= 1.0) quality = 'Good';
+                            else if (gi <= 2.0) quality = 'Fair';
+                            else if (gi <= 3.0) quality = 'Poor';
+                            
+                            return `Quality: ${quality}`;
+                        }
+                    }
+                }
+            },
+            interaction: {
+                intersect: false,
+                mode: 'index'
+            }
+        }
+    });
+}
+
+function createComponentsChart(nightlyData) {
+    window.originalComponentData = nightlyData; // Store for filtering
+    // Small delay to ensure DOM is ready and prevent resize loops
+    setTimeout(() => {
+        updateComponentsChart();
+    }, 100);
+}
+
+function updateComponentsChart() {
+    const ctx = document.getElementById('componentsChart').getContext('2d');
+    
+    if (componentsChart) {
+        componentsChart.destroy();
+    }
+    
+    // Get settings
+    const showTrendLines = document.getElementById('showTrendLines').checked;
+    
+    // Apply same filtering as trends chart
+    const dateRange = document.getElementById('dateRangeSelect').value;
+    const smoothing = document.getElementById('smoothingSelect').value;
+    
+    // Filter data by date range
+    let filteredData = filterByDateRange(window.originalComponentData, dateRange);
+    
+    // Sort chronologically for proper trend visualization
+    filteredData.sort((a, b) => new Date(a.date) - new Date(b.date));
+    
+    // Apply smoothing
+    const nightlyData = applySmoothing(filteredData, smoothing);
+    const labels = nightlyData.map(night => night.date);
+    const components = ['skew', 'spike', 'flatTop', 'topHeavy', 'multiPeak', 'noPause', 'inspirRate', 'multiBreath', 'ampVar'];
+    const colors = [
+        '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF',
+        '#FF9F40', '#FF8C42', '#C9CBCF', '#4ECDC4'
+    ];
+    
+    const datasets = [];
+    
+    components.forEach((component, index) => {
+        // Check if this component is selected for display
+        const compCheckbox = document.getElementById(`comp_${component}`);
+        const isSelected = compCheckbox ? compCheckbox.checked : true; // Default to true if checkbox doesn't exist
+        if (!isSelected) return;
+        
+        let data = nightlyData.map(night => night.weightedGI[component]);
+        
+        const dataset = {
+            label: formatComponentName(component),
+            data: data,
+            borderColor: colors[index],
+            backgroundColor: colors[index] + '30',
+            borderWidth: 2.5,
+            fill: false,
+            tension: 0.1,
+            pointRadius: 4,
+            pointHoverRadius: 7,
+            pointBackgroundColor: colors[index],
+            pointBorderColor: '#fff',
+            pointBorderWidth: 2
+        };
+        
+        datasets.push(dataset);
+        
+        // Add trend lines if requested
+        if (showTrendLines && data.length > 2) {
+            const trendData = calculateLinearTrend(data);
+            datasets.push({
+                label: `${formatComponentName(component)} Trend`,
+                data: trendData,
+                borderColor: colors[index],
+                backgroundColor: 'transparent',
+                borderWidth: 1.5,
+                borderDash: [3, 3],
+                fill: false,
+                pointRadius: 0,
+                tension: 0,
+                hidden: false // Show in legend but less prominent
+            });
+        }
+    });
+    
+    const yAxisTitle = 'Component Index Value';
+    const yAxisMax = undefined;
+    
+    componentsChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: datasets
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            resizeDelay: 0,
+            animation: {
+                duration: 0
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    max: yAxisMax,
+                    title: {
+                        display: true,
+                        text: yAxisTitle,
+                        font: { size: 14, weight: 'bold' }
+                    },
+                    ticks: {
+                        callback: function(value) {
+                            return value.toFixed(1);
+                        }
+                    },
+                    grid: {
+                        color: 'rgba(0,0,0,0.1)'
+                    }
+                },
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Date',
+                        font: { size: 14, weight: 'bold' }
+                    },
+                    ticks: {
+                        maxTicksLimit: 12,
+                        callback: function(value, index) {
+                            const date = new Date(this.getLabelForValue(value));
+                            return date.toLocaleDateString('en-US', { 
+                                month: 'short', 
+                                day: 'numeric' 
+                            });
+                        }
+                    }
+                }
+            },
+            plugins: {
+                title: {
+                    display: true,
+                    text: `Glasgow Index Components Over Time ${getDateRangeTitle(dateRange)} ${getSmoothingTitle(smoothing)}`,
+                    font: { size: 16, weight: 'bold' }
+                },
+                legend: {
+                    display: true,
+                    position: 'right',
+                    labels: {
+                        filter: function(legendItem, chartData) {
+                            // Hide trend line entries from legend for cleaner display
+                            return !legendItem.text.includes('Trend');
+                        },
+                        usePointStyle: true,
+                        padding: 15
+                    }
+                },
+                tooltip: {
+                    callbacks: {
+                        title: function(context) {
+                            return `Night: ${context[0].label}`;
+                        },
+                        label: function(context) {
+                            const value = context.parsed.y.toFixed(2);
+                            return `${context.dataset.label}: ${value}`;
+                        }
+                    }
+                }
+            },
+            interaction: {
+                intersect: false,
+                mode: 'index'
+            }
+        }
+    });
+}
+
+function createResultsTable(nightlyData) {
+    const tbody = document.getElementById('resultsTableBody');
+    tbody.innerHTML = '';
+    
+    nightlyData.forEach(night => {
+        const row = document.createElement('tr');
+        
+        row.innerHTML = `
+            <td>${night.date}</td>
+            <td>${night.startTime}</td>
+            <td>${night.duration.toFixed(1)}</td>
+            <td><span class="gi-value ${getGIClass(night.weightedGI.overall)}">${night.weightedGI.overall.toFixed(2)}</span></td>
+            <td>${night.weightedGI.skew.toFixed(2)}</td>
+            <td>${night.weightedGI.spike.toFixed(2)}</td>
+            <td>${night.weightedGI.flatTop.toFixed(2)}</td>
+            <td>${night.weightedGI.topHeavy.toFixed(2)}</td>
+            <td>${night.weightedGI.multiPeak.toFixed(2)}</td>
+            <td>${night.weightedGI.noPause.toFixed(2)}</td>
+            <td>${night.weightedGI.inspirRate.toFixed(2)}</td>
+            <td>${night.weightedGI.multiBreath.toFixed(2)}</td>
+            <td>${night.weightedGI.ampVar.toFixed(2)}</td>
+        `;
+        
+        tbody.appendChild(row);
+    });
+}
+
+function formatComponentName(component) {
+    const names = {
+        skew: 'Skew',
+        spike: 'Spike',
+        flatTop: 'Flat Top',
+        topHeavy: 'Top Heavy',
+        multiPeak: 'Multi Peak',
+        noPause: 'No Pause',
+        inspirRate: 'Inspir Rate',
+        multiBreath: 'Multi Breath',
+        ampVar: 'Variable Amp'
+    };
+    return names[component] || component;
+}
+
+function getGIClass(value) {
+    if (value <= 0.2) return 'gi-excellent';
+    if (value <= 1.0) return 'gi-good';
+    if (value <= 2.0) return 'gi-fair';
+    if (value <= 3.0) return 'gi-poor';
+    return 'gi-very-poor';
+}
+
+// Utility functions for enhanced charting
+
+function filterByDateRange(data, range) {
+    if (range === 'all') return data;
+    
+    const days = parseInt(range);
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - days);
+    
+    return data.filter(night => new Date(night.date) >= cutoffDate);
+}
+
+function applySmoothing(data, smoothing) {
+    if (smoothing === 'none' || data.length < 3) return data;
+    
+    const window = parseInt(smoothing);
+    const smoothedData = [];
+    
+    for (let i = 0; i < data.length; i++) {
+        const start = Math.max(0, i - Math.floor(window / 2));
+        const end = Math.min(data.length, i + Math.ceil(window / 2));
+        
+        const windowData = data.slice(start, end);
+        const avgGI = {};
+        
+        // Calculate average for each component
+        Object.keys(data[0].weightedGI).forEach(component => {
+            avgGI[component] = windowData.reduce((sum, night) => 
+                sum + night.weightedGI[component], 0) / windowData.length;
+            avgGI[component] = Math.round(avgGI[component] * 100) / 100;
+        });
+        
+        smoothedData.push({
+            ...data[i],
+            weightedGI: avgGI
+        });
+    }
+    
+    return smoothedData;
+}
+
+function calculateLinearTrend(data) {
+    if (data.length < 2) return data;
+    
+    const n = data.length;
+    const x = Array.from({length: n}, (_, i) => i);
+    const y = data;
+    
+    // Calculate linear regression
+    const sumX = x.reduce((a, b) => a + b, 0);
+    const sumY = y.reduce((a, b) => a + b, 0);
+    const sumXY = x.reduce((sum, xi, i) => sum + xi * y[i], 0);
+    const sumXX = x.reduce((sum, xi) => sum + xi * xi, 0);
+    
+    const slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
+    const intercept = (sumY - slope * sumX) / n;
+    
+    return x.map(xi => slope * xi + intercept);
+}
+
+function filterOutliers(data) {
+    if (data.length < 4) return data;
+    
+    // Calculate Q1, Q3, and IQR
+    const sorted = [...data].sort((a, b) => a - b);
+    const q1Index = Math.floor(sorted.length * 0.25);
+    const q3Index = Math.floor(sorted.length * 0.75);
+    const q1 = sorted[q1Index];
+    const q3 = sorted[q3Index];
+    const iqr = q3 - q1;
+    
+    const lowerBound = q1 - 1.5 * iqr;
+    const upperBound = q3 + 1.5 * iqr;
+    
+    // Replace outliers with median
+    const median = sorted[Math.floor(sorted.length / 2)];
+    
+    return data.map(value => {
+        if (value < lowerBound || value > upperBound) {
+            return median;
+        }
+        return value;
+    });
+}
+
+function getDateRangeTitle(range) {
+    switch(range) {
+        case '30': return '(Last 30 Days)';
+        case '60': return '(Last 60 Days)';
+        case '90': return '(Last 90 Days)';
+        default: return '';
+    }
+}
+
+function getSmoothingTitle(smoothing) {
+    switch(smoothing) {
+        case '3': return '- 3-day Moving Average';
+        case '7': return '- 7-day Moving Average';
+        case '14': return '- 14-day Moving Average';
+        default: return '';
+    }
+}
+
+// Component filtering functions
+
+function selectAllComponents() {
+    const components = ['skew', 'spike', 'flatTop', 'topHeavy', 'multiPeak', 'noPause', 'inspirRate', 'multiBreath', 'ampVar'];
+    components.forEach(comp => {
+        const checkbox = document.getElementById(`comp_${comp}`);
+        if (checkbox) checkbox.checked = true;
+    });
+    updateComponentsChart();
+}
+
+function selectNoComponents() {
+    const components = ['skew', 'spike', 'flatTop', 'topHeavy', 'multiPeak', 'noPause', 'inspirRate', 'multiBreath', 'ampVar'];
+    components.forEach(comp => {
+        const checkbox = document.getElementById(`comp_${comp}`);
+        if (checkbox) checkbox.checked = false;
+    });
+    updateComponentsChart();
+}
+
+function selectMainComponents() {
+    // First uncheck all
+    selectNoComponents();
+    
+    // Get filtered data to calculate averages
+    const dateRange = document.getElementById('dateRangeSelect').value;
+    let filteredData = filterByDateRange(window.originalComponentData, dateRange);
+    
+    if (filteredData.length === 0) return;
+    
+    // Calculate average values for each component over the filtered period
+    const components = ['skew', 'spike', 'flatTop', 'topHeavy', 'multiPeak', 'noPause', 'inspirRate', 'multiBreath', 'ampVar'];
+    const componentAverages = [];
+    
+    components.forEach(comp => {
+        const avgValue = filteredData.reduce((sum, night) => sum + night.weightedGI[comp], 0) / filteredData.length;
+        componentAverages.push({ component: comp, average: avgValue });
+    });
+    
+    // Sort by average value (highest first) and take top 4
+    componentAverages.sort((a, b) => b.average - a.average);
+    const topComponents = componentAverages.slice(0, 4).map(item => item.component);
+    
+    // Select the top 4 components
+    topComponents.forEach(comp => {
+        const checkbox = document.getElementById(`comp_${comp}`);
+        if (checkbox) checkbox.checked = true;
+    });
+    
+    updateComponentsChart();
+}
+
+function selectFlowComponents() {
+    // First uncheck all
+    selectNoComponents();
+    
+    // Select components related to inspiration flow shape
+    const flowComponents = ['skew', 'spike', 'flatTop', 'topHeavy', 'multiPeak'];
+    flowComponents.forEach(comp => {
+        const checkbox = document.getElementById(`comp_${comp}`);
+        if (checkbox) checkbox.checked = true;
+    });
+    updateComponentsChart();
+}
+
+function selectTimingComponents() {
+    // First uncheck all
+    selectNoComponents();
+    
+    // Select components related to breathing timing and rhythm
+    const timingComponents = ['noPause', 'inspirRate', 'multiBreath', 'ampVar'];
+    timingComponents.forEach(comp => {
+        const checkbox = document.getElementById(`comp_${comp}`);
+        if (checkbox) checkbox.checked = true;
+    });
+    updateComponentsChart();
+}
+
+</script>
+
+</body>
+</html>

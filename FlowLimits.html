@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<title>Glasgow Index</title>
+<link rel="shortcut icon" href="favicon.ico" type="image/x-icon" />
+<link rel="icon" href="favicon.ico" type="image/x-icon" />
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+<script src="EDFFile.js"></script>
+<script src="FlowLimits.js"></script>
+
+</head>
+<body style="font-family: sans-serif">
+	<div>
+		<span style="font-weight:700;font-size:24px;">Glasgow Index (v0.1 Beta)</span>
+		<span style="padding-left:100px;">For Sleep Disordered Breathing / Flow Limitations</span>
+		<span style="padding-left:100px;">(See <a href="Intro.html">introduction</a>)</span>
+	</div>
+	<p>Select file (Resmed "*DATE*_*TIME*_BRP.edf"): <input type="file" name="inputfile" id="fileInput" style="padding-left:40px;"></p>
+	<div>
+  		<canvas id="chartTop"></canvas>
+	</div>
+	<div>
+		<canvas id="chartDetail" style="height: 300px;"></canvas>
+	</div>
+	<div style="margin:auto;width:250px;">
+		<button id="backBtn" style="visibility: hidden;">&lt;&lt;Back</button>
+		<button id="fwdBtn" style="visibility: hidden;">Fwd&gt;&gt;</button>
+		<p>This is not a medical product</p>
+	</div>
+	
+<script type="text/javascript">
+
+let chartTop = null;
+let chartDetail = null;
+
+let fileHdrData = {};
+let startDateTime = null;
+let dataArray = null;
+let results = {};
+let detailSampleSelected = 0;
+
+document.getElementById('backBtn').addEventListener('click', function (event) {
+	showDetailBack();
+});
+document.getElementById('fwdBtn').addEventListener('click', function (event) {
+	showDetailForward();
+});
+
+document.getElementById('fileInput').addEventListener('change', function (event) {
+	let file = event.target.files[0];
+    let reader = new FileReader();
+	
+   	reader.onload = function (event) {
+        	let arrayBuffer = event.target.result;
+        	dataArray=null;
+        	results = {};
+        	acceptFile(arrayBuffer);
+	}
+	reader.readAsArrayBuffer(file);    
+    }
+);
+
+function acceptFile(arrayBuffer){
+	// read in file using EDF ("European Data Format" for sleep data) parser 
+	let fileData = parseEDFFile(arrayBuffer);
+	if (fileData.formatVersion!=="0"){
+		alert("File specified in incorrect format");
+		return;
+	}
+	
+	startDateTime = new Date(fileData.startDateTime.getTime());
+	
+	// extract data from parsed file
+	dataArray = formDataArray(fileData);
+
+	fileHdrData.startDate = fileData.startDate;
+	fileHdrData.startTime = fileData.startTime;
+	fileHdrData.dataRecCnt = fileData.dataRecCnt;
+	fileHdrData.dataRecDuration = fileData.dataDuration;
+
+	// find peak flow rate expirations (maximum negative flow)
+   	findMins(dataArray);
+	// find and examine inspirations
+   	findInspirations(dataArray, results);
+	// compare the relationship between expirations and inspiration
+   	calcCycleBasedIndicators(dataArray, results);
+	// prepare an idealised flow for display (not used in calcs)
+   	prepIdealFlow(dataArray, results);
+	// determine variance of amplitude (inspiration max flow) 
+	inspirationAmplitude(dataArray, results);
+	// prepare indices
+	results.cumIndex = prepIndices(results);
+	// compare inspiration & expiration volume looking for where they are not balanced
+	flowBalance();
+	// display the heat map
+	displayHeatMap(results);
+}   
+</script>
+
+</body>
+</html>

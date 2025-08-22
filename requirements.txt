@@ -1,0 +1,15 @@
+# Multi-Night Glasgow Index Analyzer Requirements
+
+# Core dependencies
+numpy>=1.21.0
+pandas>=1.3.0
+matplotlib>=3.4.0
+
+# GUI framework (included with Python on most systems)
+# tkinter - usually comes with Python installation
+
+# Optional: for better date handling
+python-dateutil>=2.8.0
+
+# Optional: for enhanced data analysis
+scipy>=1.7.0
