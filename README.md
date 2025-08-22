@@ -200,9 +200,12 @@ This program is free software: you can redistribute it and/or modify it under th
 
 This is not a medical product. It has not been reviewed or approved by any physician or regulator. It cannot be used to diagnose any form of sleep disordered breathing. It is intended for those making changes to their sleep routine and looking to create a benchmark against which they can assess any improvements.
 
-## Acknowledgments
+## Attribution
+This project builds on **GlasgowIndex** by DaveSkvn (GPL-3.0).  
+Original: https://github.com/DaveSkvn/GlasgowIndex
 
-- Original Glasgow Index algorithm by DaveSkvn
-- EDF parsing based on European Data Format specification
+We have modified and extended the code (multi-night parser and aggregation).
+Changes are documented in [CHANGELOG.md]. Our code is licensed under GPL-3.0.
+See [LICENSE](./LICENSE) for details.
 
-- ResMed for providing accessible data format on SD cards
+
