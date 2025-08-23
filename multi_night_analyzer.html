@@ -627,7 +627,6 @@ function groupByNight(results) {
         
         sessions.forEach(session => {
             const weight = session.duration / totalDuration;
-            weightedGI.overall += session.cumIndex.overall * weight;
             weightedGI.skew += session.cumIndex.skew * weight;
             weightedGI.spike += session.cumIndex.spike * weight;
             weightedGI.flatTop += session.cumIndex.flatTop * weight;
@@ -643,6 +642,11 @@ function groupByNight(results) {
         Object.keys(weightedGI).forEach(key => {
             weightedGI[key] = Math.round(weightedGI[key] * 100) / 100;
         });
+        
+        // Calculate overall GI as sum of all 9 components (corrected calculation)
+        weightedGI.overall = Math.round((weightedGI.skew + weightedGI.spike + weightedGI.flatTop + 
+                                        weightedGI.topHeavy + weightedGI.multiPeak + weightedGI.noPause + 
+                                        weightedGI.inspirRate + weightedGI.multiBreath + weightedGI.ampVar) * 100) / 100;
         
         // Sort sessions by start time to get the earliest session time
         sessions.sort((a, b) => new Date(a.startDateTime) - new Date(b.startDateTime));
