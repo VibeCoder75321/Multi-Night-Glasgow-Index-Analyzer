@@ -275,7 +275,12 @@
             </div>
         </div>
         
-        <h3>Detailed Night-by-Night Results</h3>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+            <h3 style="margin: 0;">Detailed Night-by-Night Results</h3>
+            <button onclick="exportNightlyCSV()" style="padding: 8px 16px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px;">
+                📊 Export to CSV
+            </button>
+        </div>
         <table class="night-table" id="resultsTable">
             <thead>
                 <tr>
@@ -1277,6 +1282,81 @@ function selectTimingComponents() {
         if (checkbox) checkbox.checked = true;
     });
     updateComponentsChart();
+}
+
+// CSV Export function for nightly results
+function exportNightlyCSV() {
+    if (!window.originalNightlyData || window.originalNightlyData.length === 0) {
+        alert('No data available to export. Please analyze some files first.');
+        return;
+    }
+
+    // Get the data (same as what's displayed in the table)
+    const nightlyData = window.originalNightlyData.sort((a, b) => new Date(b.date) - new Date(a.date));
+    
+    // Create CSV headers
+    const headers = [
+        'Date',
+        'Start Time', 
+        'Duration (hours)',
+        'Sessions',
+        'Overall GI',
+        'Skew',
+        'Spike', 
+        'Flat Top',
+        'Top Heavy',
+        'Multi Peak',
+        'No Pause',
+        'Inspir Rate',
+        'Multi Breath',
+        'Variable Amp'
+    ];
+    
+    // Create CSV rows
+    const rows = nightlyData.map(night => [
+        night.date,
+        night.startTime,
+        night.duration.toFixed(1),
+        night.sessions.toString(),
+        night.weightedGI.overall.toFixed(2),
+        night.weightedGI.skew.toFixed(2),
+        night.weightedGI.spike.toFixed(2),
+        night.weightedGI.flatTop.toFixed(2),
+        night.weightedGI.topHeavy.toFixed(2),
+        night.weightedGI.multiPeak.toFixed(2),
+        night.weightedGI.noPause.toFixed(2),
+        night.weightedGI.inspirRate.toFixed(2),
+        night.weightedGI.multiBreath.toFixed(2),
+        night.weightedGI.ampVar.toFixed(2)
+    ]);
+    
+    // Combine headers and rows
+    const csvContent = [headers, ...rows]
+        .map(row => row.map(field => `"${field}"`).join(','))
+        .join('\n');
+    
+    // Create and download the file
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    
+    if (link.download !== undefined) {
+        const url = URL.createObjectURL(blob);
+        link.setAttribute('href', url);
+        
+        // Generate filename with date range
+        const firstDate = nightlyData[nightlyData.length - 1].date;
+        const lastDate = nightlyData[0].date;
+        const filename = `glasgow_index_${firstDate}_to_${lastDate}.csv`;
+        
+        link.setAttribute('download', filename);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    } else {
+        // Fallback for older browsers
+        window.open('data:text/csv;charset=utf-8,' + encodeURIComponent(csvContent));
+    }
 }
 
 </script>
