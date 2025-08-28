@@ -1,16 +1,19 @@
 # Multi-Night Glasgow Index Analyzer
 
-A comprehensive tool for analyzing multiple nights of ResMed PAP data to calculate weighted averages of Glasgow Index components and track trends over time.
+A comprehensive tool for analyzing multiple nights of ResMed PAP data to calculate weighted averages of Glasgow Index components and track trends over time. Now includes complete machine settings analysis including pressure data extraction.
 
 ## Features
 
 - **Multi-Night Analysis**: Process multiple EDF files from different nights automatically
+- **Complete Machine Analysis**: Extract machine type, IPAP, EPAP, pressure support, and PAP mode
 - **Weighted Averages**: Calculate proper weighted averages when multiple sessions exist per night
+- **Pressure Settings**: Analyze IPAP, EPAP, and pressure support trends alongside Glasgow Index
 - **Trend Visualization**: Interactive charts showing Glasgow Index trends over time
 - **Component Analysis**: Detailed breakdown of all 9 Glasgow Index components
-- **Export Capabilities**: Export results to CSV or JSON formats
-- **Web-based interface**: (`multi_night_analyzer.html`)
-
+- **Export Capabilities**: Export results to CSV including all pressure and machine data
+- **Two Interface Options**: 
+  - Web-based interface (`multi_night_analyzer.html`) - **Recommended**
+  - Desktop application (`glasgow_analyzer.py`)
 
 ## Glasgow Index Components
 
@@ -37,16 +40,50 @@ The tool analyzes 9 key components of flow limitations:
 
 2. Open `multi_night_analyzer.html` in a modern web browser
 
-3. Select multiple BRP.edf files or drag and drop them onto the interface
+3. **For complete analysis**: Upload your entire ResMed SD card folder (recommended)
+   - **Includes**: Machine type, IPAP, EPAP, pressure support, PAP mode extraction
+   - **Files analyzed**: DATALOG/*.edf, STR.edf, Identification.tgt, SETTINGS/*
+   
+   **Alternative**: Upload individual BRP.edf files (Glasgow Index only)
 
+### Desktop Application
 
+1. Install Python 3.7 or higher
+
+2. Install required dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+3. Run the application:
+   ```bash
+   python glasgow_analyzer.py
+   ```
 
 ## Usage
 
 ### Data Requirements
 
-The tool processes ResMed EDF files with the naming convention:
-- `YYYYMMDD_HHMMSS_BRP.edf` (breathing/flow data files)
+#### Complete Analysis (Recommended)
+Upload your entire ResMed SD card for comprehensive analysis including:
+
+**Files Analyzed:**
+- `DATALOG/*/YYYYMMDD_HHMMSS_BRP.edf` - Breathing/flow data (for Glasgow Index)
+- `STR.edf` - Summary/settings data (for pressure settings and PAP mode)  
+- `Identification.tgt` - Machine identification (for machine type)
+- `SETTINGS/*.tgt` - Configuration files (future expansion)
+
+**Data Extracted:**
+- Glasgow Index components (9 breathing quality metrics)
+- Machine Type (e.g., "AirCurve 10 VAuto", "AirSense 10 AutoSet")
+- IPAP pressure values (inspiratory pressure)
+- EPAP pressure values (expiratory pressure)  
+- Pressure Support (IPAP - EPAP)
+- PAP Mode (CPAP, APAP, BiPAP, etc.)
+
+#### Glasgow Index Only
+Alternatively, upload individual files with the naming convention:
+- `YYYYMMDD_HHMMSS_BRP.edf` (breathing/flow data files only)
 
 These files are typically found on your ResMed SD card in:
 - `DATALOG/YYYY/MMDD/` folders
@@ -57,17 +94,21 @@ Or in OSCAR backup directories:
 ### Web Interface Usage
 
 1. **File Selection**: 
-   - Click "Select Files" or drag and drop BRP.edf files
-   - The tool will automatically filter for breathing data files
+   - **Recommended**: Click "Choose Files" and select your entire SD card folder for complete analysis
+   - **Alternative**: Upload individual BRP.edf files for Glasgow Index analysis only
+   - The tool will automatically detect and process relevant files
 
 2. **Processing**: 
    - Files are processed automatically after selection
-   - Progress is shown with a progress bar
+   - Machine identification and pressure settings are extracted first
+   - Progress is shown with a progress bar and status updates
 
 3. **Results**:
-   - Summary cards show key statistics
-   - Interactive trend charts display Glasgow Index over time
-   - Detailed table shows all components for each night
+   - Summary cards show key statistics including machine type
+   - Interactive trend charts display Glasgow Index over time  
+   - Component analysis charts for detailed breathing pattern analysis
+   - Detailed table shows all components, pressure settings, and machine data per night
+   - Export to CSV includes all extracted data for spreadsheet analysis
 
 ### Desktop Application Usage
 
@@ -133,21 +174,29 @@ Use the trend charts to identify:
 
 ## Therapy Optimization
 
-The tool can help identify how changes impact your Glasgow Index:
+The tool now provides comprehensive pressure data analysis to help optimize your therapy:
 
-### Pressure Support (EPR) Analysis
-- Compare nights with different EPR settings
-- Higher EPR often reduces skew and variable amplitude
-- May help with flat top and top heavy components
+### Pressure Support Analysis
+- **Automatic calculation**: IPAP - EPAP for each night
+- **Track pressure support trends** alongside Glasgow Index changes
+- **Correlate pressure support levels** with specific GI components
+- Compare nights with different pressure support settings to find optimal levels
 
-### Pressure Level Analysis  
-- Track how pressure changes affect overall GI
-- Identify optimal pressure ranges for your breathing patterns
-- Balance OSA control (AHI) with flow limitation reduction
+### IPAP/EPAP Analysis  
+- **Track individual pressure trends** over time
+- **Identify optimal pressure ranges** for your breathing patterns
+- **Correlate pressure changes** with Glasgow Index improvements
+- **Balance OSA control** (AHI) with flow limitation reduction (GI)
 
-### Rise Time Analysis
-- Correlate rise time settings with spike values
-- Faster rise times may reduce spike but increase other components
+### PAP Mode Analysis
+- **Automatic detection** of CPAP, APAP, BiPAP, ASV modes
+- **Compare effectiveness** between different PAP modes
+- **Track mode changes** and their impact on breathing quality
+
+### Machine Type Tracking
+- **Automatic identification** of your PAP device model
+- **Consistent data tracking** across machine upgrades or changes
+- **Export compatibility** for sharing with healthcare providers
 
 ## Technical Notes
 
@@ -200,12 +249,8 @@ This program is free software: you can redistribute it and/or modify it under th
 
 This is not a medical product. It has not been reviewed or approved by any physician or regulator. It cannot be used to diagnose any form of sleep disordered breathing. It is intended for those making changes to their sleep routine and looking to create a benchmark against which they can assess any improvements.
 
-## Attribution
-This project builds on **GlasgowIndex** by DaveSkvn (GPL-3.0).  
-Original: https://github.com/DaveSkvn/GlasgowIndex
+## Acknowledgments
 
-We have modified and extended the code (multi-night parser and aggregation).
-Changes are documented in [CHANGELOG.md]. Our code is licensed under GPL-3.0.
-See [LICENSE](./LICENSE) for details.
-
-
+- Original Glasgow Index algorithm by DaveSkvn
+- EDF parsing based on European Data Format specification
+- ResMed for providing accessible data format on SD cards

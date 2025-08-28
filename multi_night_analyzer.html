@@ -156,32 +156,38 @@
     </div>
     
           <div class="upload-section" id="uploadSection">
-          <h3>Upload DATALOG Folder</h3>
-          <p>Upload your ResMed SD card data - select entire DATALOG folder for easiest analysis:</p>
+          <h3>Upload Entire SD Card Data</h3>
+          <p><strong>For complete analysis including pressure settings, machine type, and all Glasgow Index data:</strong></p>
           
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin: 20px 0;">
-              <div style="text-align: center; padding: 20px; border: 2px dashed #007bff; border-radius: 8px; background: #f8f9ff;">
-                  <h4 style="margin-top: 0; color: #007bff;">📁 Upload DATALOG Folder</h4>
-                  <p style="font-size: 14px; color: #666; margin-bottom: 15px;">Select your entire DATALOG folder from SD card</p>
+              <div style="text-align: center; padding: 20px; border: 2px solid #007bff; border-radius: 8px; background: #f8f9ff;">
+                  <h4 style="margin-top: 0; color: #007bff;">📁 Upload Entire SD Card</h4>
+                  <p style="font-size: 14px; color: #666; margin-bottom: 15px;"><strong>Recommended:</strong> Select your entire ResMed SD card root folder</p>
                   <input type="file" id="folderInput" webkitdirectory multiple style="margin: 10px 0;">
-                  <div style="font-size: 12px; color: #888; margin-top: 10px;">
-                      <strong>Recommended:</strong> Select the DATALOG folder (contains all your nights)
+                  <div style="font-size: 12px; color: #333; margin-top: 10px; font-weight: bold;">
+                      ✅ Includes: DATALOG, STR.edf, Identification.tgt, SETTINGS
+                  </div>
+                  <div style="font-size: 11px; color: #666; margin-top: 5px;">
+                      Extracts: Machine Type, IPAP, EPAP, Pressure Support, PAP Mode
                   </div>
               </div>
               
-              <div style="text-align: center; padding: 20px; border: 2px dashed #28a745; border-radius: 8px; background: #f8fff8;">
-                  <h4 style="margin-top: 0; color: #28a745;">📄 Upload Individual Files</h4>
-                  <p style="font-size: 14px; color: #666; margin-bottom: 15px;">Select individual BRP.edf files</p>
+              <div style="text-align: center; padding: 20px; border: 2px dashed #ffc107; border-radius: 8px; background: #fffbf0;">
+                  <h4 style="margin-top: 0; color: #856404;">📄 Upload Individual Files</h4>
+                  <p style="font-size: 14px; color: #666; margin-bottom: 15px;">Select specific BRP files only</p>
                   <input type="file" name="inputfiles" id="fileInput" multiple accept=".edf" style="margin: 10px 0;">
-                  <div style="font-size: 12px; color: #888; margin-top: 10px;">
-                      <strong>Alternative:</strong> If you prefer to select files manually
+                  <div style="font-size: 12px; color: #856404; margin-top: 10px; font-weight: bold;">
+                      ⚠️ Limited: Glasgow Index only
+                  </div>
+                  <div style="font-size: 11px; color: #666; margin-top: 5px;">
+                      Missing: Pressure data, machine settings
                   </div>
               </div>
           </div>
           
           <div style="text-align: center; margin: 15px 0; padding: 15px; background: #e7f3ff; border-radius: 8px; border-left: 4px solid #007bff;">
               <p style="margin: 0; font-size: 14px;">
-                  <strong>💡 How to upload DATALOG folder:</strong> Navigate to your ResMed SD card, find the DATALOG folder, click "Choose Files", then select the DATALOG folder and click "Upload"
+                  <strong>💡 How to upload entire SD card:</strong> Insert your ResMed SD card, click "Choose Files", select the SD card root folder (usually named after your machine), and click "Upload". This ensures complete analysis with pressure settings and machine information.
               </p>
           </div>
           
@@ -287,6 +293,7 @@
                     <th>Date</th>
                     <th>Start Time</th>
                     <th>Duration (hrs)</th>
+                    <th>Machine Type</th>
                     <th>Overall GI</th>
                     <th>Skew</th>
                     <th>Spike</th>
@@ -297,6 +304,9 @@
                     <th>Inspir Rate</th>
                     <th>Multi Breath</th>
                     <th>Variable Amp</th>
+                    <th>IPAP</th>
+                    <th>EPAP</th>
+                    <th>Pressure Support</th>
                 </tr>
             </thead>
             <tbody id="resultsTableBody">
@@ -393,6 +403,11 @@ function processEntry(entry) {
 
 function handleFiles(files) {
     const brpFiles = files.filter(file => file.name.includes('_BRP.edf'));
+    const identificationFiles = files.filter(file => 
+        file.name === 'Identification.tgt' || 
+        file.name === 'Identification.json'
+    );
+    const strFiles = files.filter(file => file.name === 'STR.edf');
     const allEdfFiles = files.filter(file => file.name.endsWith('.edf'));
     
     if (brpFiles.length === 0) {
@@ -443,10 +458,10 @@ function handleFiles(files) {
     }
     
     document.getElementById('fileCount').textContent = countText;
-    processFiles(brpFiles);
+    processFiles(brpFiles, identificationFiles, strFiles);
 }
 
-async function processFiles(files) {
+async function processFiles(brpFiles, identificationFiles = [], strFiles = []) {
     nightlyResults = [];
     
     const progressBar = document.getElementById('progressBar');
@@ -455,14 +470,38 @@ async function processFiles(files) {
     
     progressBar.style.display = 'block';
     
-    for (let i = 0; i < files.length; i++) {
-        const file = files[i];
-        const progress = ((i + 1) / files.length) * 100;
+    // Parse machine identification first
+    let machineInfo = null;
+    if (identificationFiles.length > 0) {
+        try {
+            processingStatus.textContent = 'Reading machine identification...';
+            machineInfo = await parseMachineIdentification(identificationFiles[0]);
+            console.log('Detected machine:', machineInfo);
+        } catch (error) {
+            console.error('Error parsing machine identification:', error);
+        }
+    }
+    
+    // Parse STR file for pressure settings
+    let pressureSettings = null;
+    if (strFiles.length > 0) {
+        try {
+            processingStatus.textContent = 'Reading pressure settings...';
+            pressureSettings = await parseSTRFile(strFiles[0]);
+            console.log('Extracted pressure settings:', pressureSettings);
+        } catch (error) {
+            console.error('Error parsing STR file:', error);
+        }
+    }
+    
+    for (let i = 0; i < brpFiles.length; i++) {
+        const file = brpFiles[i];
+        const progress = ((i + 1) / brpFiles.length) * 100;
         progressFill.style.width = progress + '%';
         processingStatus.textContent = `Processing ${file.name}...`;
         
         try {
-            const result = await processFile(file);
+            const result = await processFile(file, machineInfo, pressureSettings);
             if (result) {
                 nightlyResults.push(result);
             }
@@ -484,14 +523,14 @@ async function processFiles(files) {
     }
 }
 
-function processFile(file) {
+function processFile(file, machineInfo = null, pressureSettings = null) {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
         
         reader.onload = function(event) {
             try {
                 const arrayBuffer = event.target.result;
-                const result = analyzeFile(arrayBuffer, file.name);
+                const result = analyzeFile(arrayBuffer, file.name, machineInfo, pressureSettings);
                 resolve(result);
             } catch (error) {
                 console.error(`Error processing file ${file.name}:`, error);
@@ -507,7 +546,7 @@ function processFile(file) {
     });
 }
 
-function analyzeFile(arrayBuffer, fileName) {
+function analyzeFile(arrayBuffer, fileName, machineInfo = null, pressureSettings = null) {
     // Parse EDF file
     const fileData = parseEDFFile(arrayBuffer);
     if (fileData.formatVersion !== "0") {
@@ -547,6 +586,9 @@ function analyzeFile(arrayBuffer, fileName) {
         time = `${timeStr.slice(0,2)}:${timeStr.slice(2,4)}:${timeStr.slice(4,6)}`;
     }
     
+    // Extract pressure data for this session date
+    let sessionPressure = getSessionPressureData(pressureSettings, date);
+    
     return {
         fileName: fileName,
         date: date,
@@ -554,7 +596,11 @@ function analyzeFile(arrayBuffer, fileName) {
         startDateTime: fileData.startDateTime,
         duration: durationHours,
         cumIndex: results.cumIndex,
-        inspirationCount: results.inspirations ? results.inspirations.length : 0
+        inspirationCount: results.inspirations ? results.inspirations.length : 0,
+        machineType: machineInfo ? machineInfo.type : 'Unknown',
+        ipap: sessionPressure ? sessionPressure.ipap : 'N/A',
+        epap: sessionPressure ? sessionPressure.epap : 'N/A',
+        papMode: sessionPressure ? sessionPressure.mode : 'Unknown'
     };
 }
 
@@ -656,13 +702,59 @@ function groupByNight(results) {
         // Sort sessions by start time to get the earliest session time
         sessions.sort((a, b) => new Date(a.startDateTime) - new Date(b.startDateTime));
         
-        nightlyData.push({
-            date: sleepNightDate,
-            startTime: sessions[0].time,
-            duration: totalDuration,
-            sessions: sessions.length,
-            weightedGI: weightedGI
-        });
+        // Calculate weighted average pressures (for APAP mode, these will be the Min values as requested)
+        let weightedIPAP = 'N/A';
+        let weightedEPAP = 'N/A';
+        let nightMode = 'Unknown';
+        
+        const validIPAP = sessions.filter(s => s.ipap !== 'N/A' && !isNaN(parseFloat(s.ipap)));
+        const validEPAP = sessions.filter(s => s.epap !== 'N/A' && !isNaN(parseFloat(s.epap)));
+        
+        if (validIPAP.length > 0) {
+            const totalIPAPDuration = validIPAP.reduce((sum, session) => sum + session.duration, 0);
+            if (totalIPAPDuration > 0) {
+                weightedIPAP = validIPAP.reduce((sum, session) => {
+                    const weight = session.duration / totalIPAPDuration;
+                    return sum + (parseFloat(session.ipap) * weight);
+                }, 0);
+                weightedIPAP = Math.round(weightedIPAP * 10) / 10;
+            }
+        }
+        
+        if (validEPAP.length > 0) {
+            const totalEPAPDuration = validEPAP.reduce((sum, session) => sum + session.duration, 0);
+            if (totalEPAPDuration > 0) {
+                weightedEPAP = validEPAP.reduce((sum, session) => {
+                    const weight = session.duration / totalEPAPDuration;
+                    return sum + (parseFloat(session.epap) * weight);
+                }, 0);
+                weightedEPAP = Math.round(weightedEPAP * 10) / 10;
+            }
+        }
+        
+        // Get mode from first session (should be consistent for the night)
+        if (sessions.length > 0 && sessions[0].papMode) {
+            nightMode = sessions[0].papMode;
+        }
+        
+                    // Calculate pressure support (IPAP - EPAP)
+            let pressureSupport = 'N/A';
+            if (weightedIPAP !== 'N/A' && weightedEPAP !== 'N/A') {
+                pressureSupport = Math.round((weightedIPAP - weightedEPAP) * 10) / 10;
+            }
+            
+            nightlyData.push({
+                date: sleepNightDate,
+                startTime: sessions[0].time,
+                duration: totalDuration,
+                sessions: sessions.length,
+                weightedGI: weightedGI,
+                machineType: sessions[0].machineType || 'Unknown',
+                ipap: weightedIPAP,
+                epap: weightedEPAP,
+                pressureSupport: pressureSupport,
+                papMode: nightMode
+            });
     });
     
     return nightlyData.sort((a, b) => new Date(b.date) - new Date(a.date)); // Most recent first
@@ -1064,6 +1156,7 @@ function createResultsTable(nightlyData) {
             <td>${night.date}</td>
             <td>${night.startTime}</td>
             <td>${night.duration.toFixed(1)}</td>
+            <td>${night.machineType}</td>
             <td><span class="gi-value ${getGIClass(night.weightedGI.overall)}">${night.weightedGI.overall.toFixed(2)}</span></td>
             <td>${night.weightedGI.skew.toFixed(2)}</td>
             <td>${night.weightedGI.spike.toFixed(2)}</td>
@@ -1074,6 +1167,9 @@ function createResultsTable(nightlyData) {
             <td>${night.weightedGI.inspirRate.toFixed(2)}</td>
             <td>${night.weightedGI.multiBreath.toFixed(2)}</td>
             <td>${night.weightedGI.ampVar.toFixed(2)}</td>
+            <td>${night.ipap !== 'N/A' ? night.ipap : 'N/A'}</td>
+            <td>${night.epap !== 'N/A' ? night.epap : 'N/A'}</td>
+            <td>${night.pressureSupport !== 'N/A' ? night.pressureSupport : 'N/A'}</td>
         `;
         
         tbody.appendChild(row);
@@ -1284,6 +1380,524 @@ function selectTimingComponents() {
     updateComponentsChart();
 }
 
+// STR file parsing for pressure settings
+async function parseSTRFile(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        
+        reader.onload = function(event) {
+            try {
+                const arrayBuffer = event.target.result;
+                const fileData = parseEDFFile(arrayBuffer);
+                
+                if (fileData.formatVersion !== "0") {
+                    throw new Error("Incorrect STR file format");
+                }
+                
+                // Extract pressure and mode data from STR file
+                const pressureData = extractPressureFromSTR(fileData);
+                resolve(pressureData);
+            } catch (error) {
+                reject(new Error(`Failed to parse STR file: ${error.message}`));
+            }
+        };
+        
+        reader.onerror = function() {
+            reject(new Error(`Failed to read STR file ${file.name}`));
+        };
+        
+        reader.readAsArrayBuffer(file);
+    });
+}
+
+function extractPressureFromSTR(fileData) {
+    // Extract pressure and mode data from STR file signals
+    const pressureData = {
+        dailyData: {},  // Date -> {ipap, epap, mode}
+        defaultMode: 'Unknown'
+    };
+    
+    if (!fileData.signals) {
+        console.log('No signals found in STR file');
+        return pressureData;
+    }
+    
+    // Use the file start date as a reference point for date conversion
+    const fileStartDate = fileData.startDateTime;
+    console.log('STR file start date:', fileStartDate);
+    
+    console.log('=== STR File Signal Analysis ===');
+    fileData.signals.forEach((signal, index) => {
+        console.log(`Signal ${index}: "${signal.label}" (${signal.physDimension}) - ${signal.physicalValues ? signal.physicalValues.length : 0} samples`);
+    });
+    
+    // Find key signals for pressure and mode data
+    const targetIPAPSignal = fileData.signals.find(s => s.label && s.label.includes('TgtIPAP.50'));
+    const targetEPAPSignal = fileData.signals.find(s => s.label && s.label.includes('TgtEPAP.50'));
+    const modeSignal = fileData.signals.find(s => s.label && s.label.includes('Mode'));
+    const dateSignal = fileData.signals.find(s => s.label && s.label.includes('Date'));
+    
+    // Look for EPR-related signals for AirSense machines
+    const eprLevelSignal = fileData.signals.find(s => s.label && s.label.includes('S.EPR.Level'));
+    const eprEnableSignal = fileData.signals.find(s => s.label && s.label.includes('S.EPR.EPREnable'));
+    const cpapPressSignal = fileData.signals.find(s => s.label && s.label.includes('S.C.Press'));
+    
+    // Check for AirSense-specific signals (CPAP pressure + EPR)
+    const hasEPR = eprLevelSignal && eprEnableSignal;
+    const hasCPAPPress = cpapPressSignal;
+    
+    console.log('Found signals:', {
+        ipap: targetIPAPSignal ? targetIPAPSignal.label : 'Not found',
+        epap: targetEPAPSignal ? targetEPAPSignal.label : 'Not found',
+        mode: modeSignal ? modeSignal.label : 'Not found',
+        date: dateSignal ? dateSignal.label : 'Not found',
+        eprLevel: eprLevelSignal ? eprLevelSignal.label : 'Not found',
+        eprEnable: eprEnableSignal ? eprEnableSignal.label : 'Not found',
+        cpapPress: cpapPressSignal ? cpapPressSignal.label : 'Not found'
+    });
+    
+    console.log('Machine type analysis:', {
+        hasEPR: hasEPR,
+        hasCPAPPress: hasCPAPPress,
+        hasIPAPEPAP: !!(targetIPAPSignal && targetEPAPSignal)
+    });
+    
+    // Debug signal properties
+    if (targetIPAPSignal) {
+        console.log('IPAP Signal Properties:', {
+            label: targetIPAPSignal.label,
+            physDimension: targetIPAPSignal.physDimension,
+            physMin: targetIPAPSignal.physMin,
+            physMax: targetIPAPSignal.physMax,
+            digMin: targetIPAPSignal.digMin,
+            digMax: targetIPAPSignal.digMax,
+            physFactor: targetIPAPSignal.physFactor,
+            hasPhysicalValues: !!(targetIPAPSignal.physicalValues && targetIPAPSignal.physicalValues.length),
+            hasDigitalValues: !!(targetIPAPSignal.digitalValues && targetIPAPSignal.digitalValues.length)
+        });
+    }
+    
+    if (targetEPAPSignal) {
+        console.log('EPAP Signal Properties:', {
+            label: targetEPAPSignal.label,
+            physDimension: targetEPAPSignal.physDimension,
+            physMin: targetEPAPSignal.physMin,
+            physMax: targetEPAPSignal.physMax,
+            digMin: targetEPAPSignal.digMin,
+            digMax: targetEPAPSignal.digMax,
+            physFactor: targetEPAPSignal.physFactor,
+            hasPhysicalValues: !!(targetEPAPSignal.physicalValues && targetEPAPSignal.physicalValues.length),
+            hasDigitalValues: !!(targetEPAPSignal.digitalValues && targetEPAPSignal.digitalValues.length)
+        });
+    }
+    
+    // Determine if this is an AirSense (CPAP+EPR) or AirCurve (BiPAP) machine
+    const isAirSenseMode = hasCPAPPress && hasEPR && !targetIPAPSignal;
+    const isAirCurveMode = targetIPAPSignal && targetEPAPSignal;
+    
+    console.log('Machine mode detection:', {
+        isAirSenseMode: isAirSenseMode,
+        isAirCurveMode: isAirCurveMode
+    });
+    
+    if (!dateSignal) {
+        console.log('Date signal not found in STR file');
+        return pressureData;
+    }
+    
+    if (!isAirSenseMode && !isAirCurveMode) {
+        console.log('Could not determine machine type - neither AirSense nor AirCurve signals found');
+        return pressureData;
+    }
+    
+    // Extract daily pressure data
+    const dates = dateSignal.physicalValues || dateSignal.digitalValues || [];
+    
+    // For pressure signals, we need to properly convert digital to physical values
+    let ipapValues = [];
+    let epapValues = [];
+    
+    if (isAirCurveMode) {
+        console.log('Processing AirCurve/BiPAP pressure data...');
+        // AirCurve machines have separate IPAP and EPAP settings
+        
+        // IPAP signals should already be in cmH2O units!
+        // The EDF parser is incorrectly applying pressure scaling to signals already in physical units
+        if (targetIPAPSignal.physicalValues && targetIPAPSignal.physicalValues.length > 0) {
+        console.log('IPAP Signal is labeled as (cmH2O) - should already be in correct units!');
+        console.log('Signal properties:', {
+            physMin: targetIPAPSignal.physMin,
+            physMax: targetIPAPSignal.physMax,
+            digMin: targetIPAPSignal.digMin,
+            digMax: targetIPAPSignal.digMax,
+            physFactor: targetIPAPSignal.physFactor
+        });
+        
+        // Try using the digital values directly with proper scaling
+        if (targetIPAPSignal.digitalValues && targetIPAPSignal.digitalValues.length > 0) {
+            console.log('Using digital values and calculating proper physical values');
+            ipapValues = targetIPAPSignal.digitalValues.map((digitalVal, index) => {
+                // Calculate proper physical value using signal min/max ranges
+                const physMin = parseFloat(targetIPAPSignal.physMin);
+                const physMax = parseFloat(targetIPAPSignal.physMax);
+                const digMin = parseInt(targetIPAPSignal.digMin);
+                const digMax = parseInt(targetIPAPSignal.digMax);
+                
+                // Linear scaling: physical = physMin + (digital - digMin) * (physMax - physMin) / (digMax - digMin)
+                const physicalValue = physMin + (digitalVal - digMin) * (physMax - physMin) / (digMax - digMin);
+                const rounded = Math.round(physicalValue * 5) / 5; // Round to nearest 0.2
+                
+                if (index < 5) {
+                    console.log(`IPAP[${index}]: Digital ${digitalVal} → Physical ${physicalValue.toFixed(3)} → ${rounded} cmH2O`);
+                }
+                
+                return rounded;
+            });
+        } else {
+            console.log('Falling back to pre-converted values (likely incorrect due to double scaling)');
+            ipapValues = targetIPAPSignal.physicalValues.map(val => {
+                const value = parseFloat(val);
+                return Math.round(value * 5) / 5;
+            });
+        }
+        console.log('Using pre-converted IPAP physical values with scaling correction (÷50)');
+        console.log('Sample IPAP values (raw):', targetIPAPSignal.physicalValues.slice(0, 5));
+        console.log('Sample IPAP values (corrected):', ipapValues.slice(0, 5));
+    } else if (targetIPAPSignal.digitalValues && targetIPAPSignal.physFactor) {
+        // Convert digital to physical using the scaling factor and apply correction
+        ipapValues = targetIPAPSignal.digitalValues.map(digital => {
+            const physicalValue = digital * targetIPAPSignal.physFactor;
+            const correctedValue = physicalValue / 50.0; // Apply scaling correction
+            return Math.round(correctedValue * 20) / 20; // Round to nearest 0.05 for better precision
+        });
+        console.log('Converting IPAP digital to physical with scaling correction');
+        console.log('Factor:', targetIPAPSignal.physFactor, 'with ÷50 correction');
+        console.log('Sample IPAP conversion:', targetIPAPSignal.digitalValues.slice(0, 3), '->', ipapValues.slice(0, 3));
+    }
+    
+    // Convert EPAP values - physicalValues are already converted and stored as strings
+    if (targetEPAPSignal.physicalValues && targetEPAPSignal.physicalValues.length > 0) {
+        // Convert string values to numbers and apply scaling correction
+        // STR file pressure values appear to be scaled by factor of ~50  
+        // Apply same precision approach as IPAP
+        // EPAP signals should already be in cmH2O units!
+        console.log('EPAP Signal is labeled as (cmH2O) - should already be in correct units!');
+        
+        // Try using the digital values directly with proper scaling
+        if (targetEPAPSignal.digitalValues && targetEPAPSignal.digitalValues.length > 0) {
+            console.log('Using digital values and calculating proper physical values for EPAP');
+            epapValues = targetEPAPSignal.digitalValues.map((digitalVal, index) => {
+                // Calculate proper physical value using signal min/max ranges
+                const physMin = parseFloat(targetEPAPSignal.physMin);
+                const physMax = parseFloat(targetEPAPSignal.physMax);
+                const digMin = parseInt(targetEPAPSignal.digMin);
+                const digMax = parseInt(targetEPAPSignal.digMax);
+                
+                // Linear scaling: physical = physMin + (digital - digMin) * (physMax - physMin) / (digMax - digMin)
+                const physicalValue = physMin + (digitalVal - digMin) * (physMax - physMin) / (digMax - digMin);
+                const rounded = Math.round(physicalValue * 5) / 5; // Round to nearest 0.2
+                
+                if (index < 5) {
+                    console.log(`EPAP[${index}]: Digital ${digitalVal} → Physical ${physicalValue.toFixed(3)} → ${rounded} cmH2O`);
+                }
+                
+                return rounded;
+            });
+        } else {
+            console.log('Falling back to pre-converted values (likely incorrect due to double scaling)');
+            epapValues = targetEPAPSignal.physicalValues.map(val => {
+                const value = parseFloat(val);
+                return Math.round(value * 5) / 5;
+            });
+        }
+        console.log('Using pre-converted EPAP physical values with scaling correction');
+        console.log('Sample EPAP values (raw):', targetEPAPSignal.physicalValues.slice(0, 5));
+        console.log('Sample EPAP values (corrected):', epapValues.slice(0, 5));
+    } else if (targetEPAPSignal.digitalValues && targetEPAPSignal.physFactor) {
+        // Convert digital to physical using the scaling factor and apply correction
+        epapValues = targetEPAPSignal.digitalValues.map(digital => {
+            const physicalValue = digital * targetEPAPSignal.physFactor;
+            const correctedValue = physicalValue / 50.0; // Apply scaling correction
+            return Math.round(correctedValue * 20) / 20; // Round to nearest 0.05 for better precision
+        });
+        console.log('Converting EPAP digital to physical with scaling correction');
+        console.log('Factor:', targetEPAPSignal.physFactor, 'with ÷50 correction');
+        console.log('Sample EPAP conversion:', targetEPAPSignal.digitalValues.slice(0, 3), '->', epapValues.slice(0, 3));
+        }
+        
+    } else if (isAirSenseMode) {
+        console.log('Processing AirSense/CPAP+EPR pressure data...');
+        // AirSense machines use CPAP pressure + EPR (Expiratory Pressure Relief)
+        // IPAP = CPAP Pressure, EPAP = CPAP Pressure - EPR Level
+        
+        // Get CPAP pressure values
+        let cpapPressValues = [];
+        if (cpapPressSignal.physicalValues && cpapPressSignal.physicalValues.length > 0) {
+            cpapPressValues = cpapPressSignal.physicalValues.map(val => {
+                const rawValue = parseFloat(val);
+                const correctedValue = rawValue / 50.0; // Apply same scaling correction
+                return Math.round(correctedValue * 10) / 10;
+            });
+            console.log('CPAP pressure values (corrected):', cpapPressValues.slice(0, 5));
+        }
+        
+        // Get EPR level values
+        let eprLevelValues = [];
+        if (eprLevelSignal.physicalValues && eprLevelSignal.physicalValues.length > 0) {
+            eprLevelValues = eprLevelSignal.physicalValues.map(val => {
+                const rawValue = parseFloat(val);
+                // EPR is typically 0-5 cmH2O, might not need scaling correction
+                return Math.round(rawValue * 10) / 10;
+            });
+            console.log('EPR level values:', eprLevelValues.slice(0, 5));
+        }
+        
+        // Check EPR enable status
+        let eprEnableValues = [];
+        if (eprEnableSignal.physicalValues && eprEnableSignal.physicalValues.length > 0) {
+            eprEnableValues = eprEnableSignal.physicalValues.map(val => parseInt(val));
+        } else if (eprEnableSignal.digitalValues && eprEnableSignal.digitalValues.length > 0) {
+            eprEnableValues = eprEnableSignal.digitalValues.map(val => parseInt(val));
+        }
+        
+        // Calculate IPAP and EPAP for AirSense
+        ipapValues = cpapPressValues; // IPAP = CPAP pressure
+        epapValues = cpapPressValues.map((cpapPress, index) => {
+            const eprLevel = eprLevelValues[index] || 0;
+            const eprEnabled = eprEnableValues[index] || 0;
+            
+            if (eprEnabled && eprLevel > 0) {
+                // EPAP = CPAP Pressure - EPR Level (when EPR is enabled)
+                const epap = cpapPress - eprLevel;
+                console.log(`EPAP[${index}]: ${cpapPress} - ${eprLevel} = ${epap} (EPR enabled)`);
+                return Math.round(epap * 10) / 10;
+            } else {
+                // EPAP = CPAP Pressure (when EPR is disabled)
+                console.log(`EPAP[${index}]: ${cpapPress} (EPR disabled)`);
+                return cpapPress;
+            }
+        });
+        
+        console.log('AirSense calculated values:');
+        console.log('IPAP (CPAP pressure):', ipapValues.slice(0, 5));
+        console.log('EPAP (CPAP - EPR):', epapValues.slice(0, 5));
+    }
+    const modeValues = modeSignal ? (modeSignal.physicalValues || modeSignal.digitalValues || []) : [];
+    
+    console.log('Data arrays lengths:', {
+        dates: dates.length,
+        ipap: ipapValues.length,
+        epap: epapValues.length,
+        mode: modeValues.length
+    });
+    
+    // Debug: Show first few date values to understand the format
+    console.log('Sample date values:', dates.slice(0, 5));
+    console.log('Sample IPAP values:', ipapValues.slice(0, 5));
+    console.log('Sample EPAP values:', epapValues.slice(0, 5));
+    
+    for (let i = 0; i < Math.min(dates.length, ipapValues.length, epapValues.length); i++) {
+        const dateValue = dates[i];
+        const ipapValue = parseFloat(ipapValues[i]);
+        const epapValue = parseFloat(epapValues[i]);
+        let modeValue = modeValues.length > i ? modeValues[i] : 0;
+        
+        // Convert date from various possible formats
+        let dateStr = '';
+        if (typeof dateValue === 'string' && dateValue.includes('-')) {
+            dateStr = dateValue;
+        } else if (typeof dateValue === 'number' || !isNaN(dateValue)) {
+            // Convert from ResMed date format using the file start date as reference
+            const dateNum = parseInt(dateValue);
+            
+            if (i === 0) {
+                console.log(`Processing dates - First value: ${dateNum}, File start: ${fileStartDate}`);
+            }
+            
+            // Use the file start date as the anchor point for the first date entry
+            if (fileStartDate && i === 0) {
+                // Assume the first date entry corresponds to the file start date
+                dateStr = fileStartDate.toISOString().split('T')[0];
+                window.strDateAnchor = {
+                    firstDateNum: dateNum,
+                    firstDateStr: dateStr
+                };
+                console.log(`Setting date anchor: ${dateNum} -> ${dateStr}`);
+            } else if (window.strDateAnchor) {
+                // Calculate subsequent dates based on the offset from the first date
+                const daysDifference = dateNum - window.strDateAnchor.firstDateNum;
+                const anchorDate = new Date(window.strDateAnchor.firstDateStr);
+                const calculatedDate = new Date(anchorDate.getTime() + daysDifference * 24 * 60 * 60 * 1000);
+                dateStr = calculatedDate.toISOString().split('T')[0];
+            }
+            
+            if (i < 5) {
+                console.log(`Date[${i}]: ${dateNum} -> ${dateStr}`);
+            }
+        }
+        
+        // Convert mode number to text
+        let modeText = convertModeNumberToText(parseInt(modeValue));
+        
+        if (dateStr && !isNaN(ipapValue) && !isNaN(epapValue) && ipapValue > 0 && epapValue > 0) {
+            pressureData.dailyData[dateStr] = {
+                ipap: Math.round(ipapValue * 10) / 10,
+                epap: Math.round(epapValue * 10) / 10,
+                mode: modeText
+            };
+            
+            // Set default mode from first valid entry
+            if (pressureData.defaultMode === 'Unknown') {
+                pressureData.defaultMode = modeText;
+            }
+        }
+    }
+    
+    console.log('Extracted pressure data:', pressureData);
+    return pressureData;
+}
+
+function convertModeNumberToText(modeNum) {
+    // Convert ResMed mode numbers to text
+    const modeMap = {
+        0: 'CPAP',
+        1: 'APAP',
+        2: 'AutoSet',  // ResMed's APAP
+        3: 'APAP',
+        4: 'BiPAP',
+        5: 'BiPAP Auto',
+        6: 'ASV',
+        7: 'ASVAuto',
+        8: 'iVAPS'
+    };
+    
+    return modeMap[modeNum] || `Mode ${modeNum}`;
+}
+
+function getSessionPressureData(pressureSettings, sessionDate) {
+    if (!pressureSettings || !pressureSettings.dailyData) {
+        return null;
+    }
+    
+    // Try to find pressure data for this specific date
+    if (pressureSettings.dailyData[sessionDate]) {
+        return pressureSettings.dailyData[sessionDate];
+    }
+    
+    // If direct match fails, check if we have a date conversion issue
+    // Try to find a date that could be the same logical date with different year
+    const sessionDateParts = sessionDate.split('-');
+    const sessionMonth = sessionDateParts[1];
+    const sessionDay = sessionDateParts[2];
+    
+    // Look for dates with same month/day but different year
+    for (const [strDate, data] of Object.entries(pressureSettings.dailyData)) {
+        const strDateParts = strDate.split('-');
+        if (strDateParts[1] === sessionMonth && strDateParts[2] === sessionDay) {
+            console.log(`Found matching month/day: Using pressure data from ${strDate} for session on ${sessionDate}`);
+            return data;
+        }
+    }
+    
+    // If not found, try nearby dates (within 1 day)
+    const sessionDateObj = new Date(sessionDate);
+    const nearbyDates = [];
+    
+    for (let i = -1; i <= 1; i++) {
+        const testDate = new Date(sessionDateObj);
+        testDate.setDate(testDate.getDate() + i);
+        const testDateStr = testDate.toISOString().split('T')[0];
+        if (pressureSettings.dailyData[testDateStr]) {
+            nearbyDates.push({
+                date: testDateStr,
+                data: pressureSettings.dailyData[testDateStr],
+                daysDiff: Math.abs(i)
+            });
+        }
+    }
+    
+    // Return closest match
+    if (nearbyDates.length > 0) {
+        nearbyDates.sort((a, b) => a.daysDiff - b.daysDiff);
+        console.log(`Using pressure data from ${nearbyDates[0].date} for session on ${sessionDate}`);
+        return nearbyDates[0].data;
+    }
+    
+    // If no nearby dates found, return null
+    console.log(`No pressure data found for session date: ${sessionDate}. Available dates:`, Object.keys(pressureSettings.dailyData).slice(0, 5));
+    return null;
+}
+
+// Machine identification parsing
+async function parseMachineIdentification(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        
+        reader.onload = function(event) {
+            try {
+                const content = event.target.result;
+                let machineInfo = {};
+                
+                if (file.name.endsWith('.json')) {
+                    // Parse JSON format (newer machines like AS11)
+                    const jsonData = JSON.parse(content);
+                    machineInfo = {
+                        type: jsonData.ProductName || 'Unknown',
+                        serial: jsonData.SerialNumber || 'Unknown',
+                        softwareId: jsonData.SoftwareId || 'Unknown'
+                    };
+                } else if (file.name.endsWith('.tgt')) {
+                    // Parse TGT format (older machines)
+                    const lines = content.split('\n');
+                    let productName = 'Unknown';
+                    let serialNumber = 'Unknown';
+                    let softwareId = 'Unknown';
+                    
+                    for (const line of lines) {
+                        const trimmed = line.trim();
+                        if (trimmed.startsWith('#PNA ')) {
+                            productName = trimmed.substring(5).trim();
+                        } else if (trimmed.startsWith('#SRN ')) {
+                            serialNumber = trimmed.substring(5).trim();
+                        } else if (trimmed.startsWith('#SID ')) {
+                            softwareId = trimmed.substring(5).trim();
+                        }
+                    }
+                    
+                    machineInfo = {
+                        type: formatMachineType(productName),
+                        serial: serialNumber,
+                        softwareId: softwareId
+                    };
+                }
+                
+                resolve(machineInfo);
+            } catch (error) {
+                reject(new Error(`Failed to parse machine identification: ${error.message}`));
+            }
+        };
+        
+        reader.onerror = function() {
+            reject(new Error(`Failed to read file ${file.name}`));
+        };
+        
+        reader.readAsText(file);
+    });
+}
+
+function formatMachineType(productName) {
+    if (!productName || productName === 'Unknown') {
+        return 'Unknown';
+    }
+    
+    // Convert underscores to spaces and clean up common ResMed naming
+    return productName
+        .replace(/_/g, ' ')           // Replace underscores with spaces
+        .replace(/([a-z])([A-Z])/g, '$1 $2')  // Add spaces between camelCase
+        .replace(/\s+/g, ' ')         // Remove extra spaces
+        .trim();
+}
+
 // CSV Export function for nightly results
 function exportNightlyCSV() {
     if (!window.originalNightlyData || window.originalNightlyData.length === 0) {
@@ -1300,6 +1914,7 @@ function exportNightlyCSV() {
         'Start Time', 
         'Duration (hours)',
         'Sessions',
+        'Machine Type',
         'Overall GI',
         'Skew',
         'Spike', 
@@ -1309,7 +1924,10 @@ function exportNightlyCSV() {
         'No Pause',
         'Inspir Rate',
         'Multi Breath',
-        'Variable Amp'
+        'Variable Amp',
+        'IPAP',
+        'EPAP',
+        'Pressure Support'
     ];
     
     // Create CSV rows
@@ -1318,6 +1936,7 @@ function exportNightlyCSV() {
         night.startTime,
         night.duration.toFixed(1),
         night.sessions.toString(),
+        night.machineType || 'Unknown',
         night.weightedGI.overall.toFixed(2),
         night.weightedGI.skew.toFixed(2),
         night.weightedGI.spike.toFixed(2),
@@ -1327,7 +1946,10 @@ function exportNightlyCSV() {
         night.weightedGI.noPause.toFixed(2),
         night.weightedGI.inspirRate.toFixed(2),
         night.weightedGI.multiBreath.toFixed(2),
-        night.weightedGI.ampVar.toFixed(2)
+        night.weightedGI.ampVar.toFixed(2),
+        night.ipap !== 'N/A' ? night.ipap.toString() : 'N/A',
+        night.epap !== 'N/A' ? night.epap.toString() : 'N/A',
+        night.pressureSupport !== 'N/A' ? night.pressureSupport.toString() : 'N/A'
     ]);
     
     // Combine headers and rows
