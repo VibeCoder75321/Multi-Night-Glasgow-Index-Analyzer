@@ -156,8 +156,8 @@
     </div>
     
           <div class="upload-section" id="uploadSection">
-          <h3>Upload Entire SD Card Data</h3>
-          <p><strong>For complete analysis including pressure settings, machine type, and all Glasgow Index data:</strong></p>
+          <h3>Upload Entire SD Card Data for complete analysis</h3>
+          <!-- <p><strong>For complete analysis including pressure settings, machine type, and all Glasgow Index data:</strong></p> -->
           
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin: 20px 0;">
               <div style="text-align: center; padding: 20px; border: 2px solid #007bff; border-radius: 8px; background: #f8f9ff;">
@@ -165,22 +165,22 @@
                   <p style="font-size: 14px; color: #666; margin-bottom: 15px;"><strong>Recommended:</strong> Select your entire ResMed SD card root folder</p>
                   <input type="file" id="folderInput" webkitdirectory multiple style="margin: 10px 0;">
                   <div style="font-size: 12px; color: #333; margin-top: 10px; font-weight: bold;">
-                      ✅ Includes: DATALOG, STR.edf, Identification.tgt, SETTINGS
+                      <!-- ✅ Includes: DATALOG, STR.edf, Identification.tgt, SETTINGS -->
                   </div>
                   <div style="font-size: 11px; color: #666; margin-top: 5px;">
-                      Extracts: Machine Type, IPAP, EPAP, Pressure Support, PAP Mode
+                      <!-- Extracts: Machine Type, IPAP, EPAP, Pressure Support, PAP Mode -->
                   </div>
               </div>
               
               <div style="text-align: center; padding: 20px; border: 2px dashed #ffc107; border-radius: 8px; background: #fffbf0;">
-                  <h4 style="margin-top: 0; color: #856404;">📄 Upload Individual Files</h4>
-                  <p style="font-size: 14px; color: #666; margin-bottom: 15px;">Select specific BRP files only</p>
+                  <h4 style="margin-top: 0; color: #856404;">📄 Or Upload Individual Files</h4>
+                  <p style="font-size: 14px; color: #666; margin-bottom: 15px;">Helpful to review a single night or an OSCAR Backup</p>
                   <input type="file" name="inputfiles" id="fileInput" multiple accept=".edf" style="margin: 10px 0;">
                   <div style="font-size: 12px; color: #856404; margin-top: 10px; font-weight: bold;">
                       ⚠️ Limited: Glasgow Index only
                   </div>
                   <div style="font-size: 11px; color: #666; margin-top: 5px;">
-                      Missing: Pressure data, machine settings
+                      <!-- Missing: Pressure data, machine settings -->
                   </div>
               </div>
           </div>
@@ -219,15 +219,31 @@
         </div>
         
         <div class="chart-container">
+            <h3 style="margin-bottom: 10px;">Night Heatmap</h3>
+            <div style="margin-bottom: 10px;">
+                <label for="nightSelect" style="margin-right: 8px;">Select Night:</label>
+                <select id="nightSelect" onchange="updateNightHeatmap()" style="padding: 5px 8px;"></select>
+            </div>
+            <div style="position: relative; height: 380px; width: 100%;">
+                <canvas id="chartTop"></canvas>
+            </div>
+        </div>
+        
+        <div class="chart-container">
             <h3>Glasgow Index Trends Over Time</h3>
             <div style="margin-bottom: 15px;">
                 <label for="dateRangeSelect">Date Range:</label>
-                <select id="dateRangeSelect" style="margin: 0 10px; padding: 5px;">
+                <select id="dateRangeSelect" style="margin: 0 10px; padding: 5px;" onchange="onDateRangeChange(); updateAllCharts()">
                     <option value="all">All Data</option>
                     <option value="30">Last 30 Days</option>
                     <option value="60">Last 60 Days</option>
                     <option value="90">Last 90 Days</option>
+                    <option value="custom">Custom…</option>
                 </select>
+                <span id="customDateBlock" style="display: none;">
+                    <input type="date" id="customStartDate" style="padding: 5px; margin-right: 6px;">
+                    <input type="date" id="customEndDate" style="padding: 5px; margin-right: 10px;">
+                </span>
                 
                 <label for="smoothingSelect">Smoothing:</label>
                 <select id="smoothingSelect" style="margin: 0 10px; padding: 5px;">
@@ -597,6 +613,8 @@ function analyzeFile(arrayBuffer, fileName, machineInfo = null, pressureSettings
         duration: durationHours,
         cumIndex: results.cumIndex,
         inspirationCount: results.inspirations ? results.inspirations.length : 0,
+        inspirations: results.inspirations || [],
+        sampleCount: (results.inspirations && results.inspirations.length > 0) ? results.inspirations[results.inspirations.length - 1].end : (dataArray ? dataArray.length : 0),
         machineType: machineInfo ? machineInfo.type : 'Unknown',
         ipap: sessionPressure ? sessionPressure.ipap : 'N/A',
         epap: sessionPressure ? sessionPressure.epap : 'N/A',
@@ -620,6 +638,10 @@ function displayResults() {
     
     // Create results table
     createResultsTable(nightlyData);
+    
+    // Populate selector and render heatmap
+    populateNightSelector(nightlyData);
+    renderMostRecentNightHeatmap(nightlyData);
     
     // Show results section
     document.getElementById('resultsSection').style.display = 'block';
@@ -760,6 +782,130 @@ function groupByNight(results) {
     return nightlyData.sort((a, b) => new Date(b.date) - new Date(a.date)); // Most recent first
 }
 
+// Build and render heatmap for the most recent night by concatenating sessions
+function renderMostRecentNightHeatmap(nightlyData) {
+    if (!nightlyData || nightlyData.length === 0) return;
+    
+    // Most recent night is first due to sorting in groupByNight
+    const mostRecentNightDate = nightlyData[0].date;
+    const nightlyWeighted = nightlyData[0].weightedGI;
+    
+    // Collect sessions that belong to this sleep night
+    const sessions = getSessionsForNight(mostRecentNightDate);
+    if (!sessions || sessions.length === 0) return;
+    
+    // Sort by start time
+    sessions.sort((a, b) => new Date(a.startDateTime) - new Date(b.startDateTime));
+    
+    // Concatenate inspirations, adjusting sample indices
+    let sampleOffset = 0;
+    const concatenatedInspirations = [];
+    sessions.forEach(session => {
+        if (!session.inspirations || session.inspirations.length === 0) return;
+        session.inspirations.forEach(insp => {
+            concatenatedInspirations.push({
+                start: (insp.start || 0) + sampleOffset,
+                end: (insp.end || 0) + sampleOffset,
+                indices: insp.indices
+            });
+        });
+        // Advance offset by this session's length in samples
+        const sessionSamples = session.sampleCount || (session.inspirations[session.inspirations.length - 1]?.end || 0);
+        sampleOffset += sessionSamples;
+    });
+    
+    // Prepare globals expected by original displayHeatMap()
+    window.startDateTime = new Date(sessions[0].startDateTime);
+    // Provide a placeholder dataArray so click detail handler is safe if used
+    window.dataArray = new Float32Array(Math.max(sampleOffset, 1));
+    
+    // Use duration-weighted nightly components for the labels on the left
+    const resultsForHeatmap = {
+        inspirations: concatenatedInspirations,
+        cumIndex: nightlyWeighted
+    };
+    
+    try {
+        displayHeatMap(resultsForHeatmap);
+    } catch (e) {
+        console.error('Heatmap render failed:', e);
+    }
+}
+
+// Helper: find sessions in nightlyResults that map to the given sleep night date
+function getSessionsForNight(sleepNightDate) {
+    if (!nightlyResults || nightlyResults.length === 0) return [];
+    
+    const sessions = [];
+    nightlyResults.forEach(result => {
+        const sessionDateTime = new Date(result.startDateTime);
+        const sessionHour = sessionDateTime.getHours();
+        let nightDate;
+        if (sessionHour >= 18) {
+            nightDate = result.date;
+        } else if (sessionHour < 12) {
+            const prevDate = new Date(sessionDateTime);
+            prevDate.setDate(prevDate.getDate() - 1);
+            nightDate = prevDate.toISOString().split('T')[0];
+        } else {
+            nightDate = result.date;
+        }
+        if (nightDate === sleepNightDate) sessions.push(result);
+    });
+    return sessions;
+}
+
+// Populate night dropdown
+function populateNightSelector(nightlyData) {
+    const select = document.getElementById('nightSelect');
+    if (!select) return;
+    select.innerHTML = '';
+    nightlyData.forEach(night => {
+        const opt = document.createElement('option');
+        opt.value = night.date;
+        opt.textContent = night.date;
+        select.appendChild(opt);
+    });
+    if (nightlyData.length > 0) {
+        select.value = nightlyData[0].date; // most recent
+    }
+}
+
+// Update heatmap when a different night is selected
+function updateNightHeatmap() {
+    const select = document.getElementById('nightSelect');
+    if (!select || !window.originalNightlyData) return;
+    const date = select.value;
+    const night = window.originalNightlyData.find(n => n.date === date);
+    if (!night) return;
+    
+    // Build concatenated inspirations and render just like in most-recent function
+    const sessions = getSessionsForNight(date);
+    if (!sessions || sessions.length === 0) return;
+    sessions.sort((a, b) => new Date(a.startDateTime) - new Date(b.startDateTime));
+    let sampleOffset = 0;
+    const concatenatedInspirations = [];
+    sessions.forEach(session => {
+        if (!session.inspirations) return;
+        session.inspirations.forEach(insp => {
+            concatenatedInspirations.push({
+                start: (insp.start || 0) + sampleOffset,
+                end: (insp.end || 0) + sampleOffset,
+                indices: insp.indices
+            });
+        });
+        const sessionSamples = session.sampleCount || (session.inspirations[session.inspirations.length - 1]?.end || 0);
+        sampleOffset += sessionSamples;
+    });
+    window.startDateTime = new Date(sessions[0].startDateTime);
+    window.dataArray = new Float32Array(Math.max(sampleOffset, 1));
+    try {
+        displayHeatMap({ inspirations: concatenatedInspirations, cumIndex: night.weightedGI });
+    } catch (e) {
+        console.error('Heatmap render failed:', e);
+    }
+}
+
 function updateSummaryCards(nightlyData) {
     document.getElementById('nightsCount').textContent = nightlyData.length;
     
@@ -778,6 +924,19 @@ function createTrendsChart(nightlyData) {
     window.originalNightlyData = nightlyData; // Store for filtering
     // Small delay to ensure DOM is ready and prevent resize loops
     setTimeout(() => {
+        // Initialize custom date inputs to full span if empty
+        const block = document.getElementById('customDateBlock');
+        const startInput = document.getElementById('customStartDate');
+        const endInput = document.getElementById('customEndDate');
+        if (nightlyData && nightlyData.length > 0 && startInput && endInput) {
+            const dates = nightlyData.map(n => new Date(n.date)).sort((a,b)=>a-b);
+            const min = dates[0];
+            const max = dates[dates.length-1];
+            if (!startInput.value) startInput.value = formatDateISO(min);
+            if (!endInput.value) endInput.value = formatDateISO(max);
+            startInput.max = formatDateISO(max);
+            endInput.min = formatDateISO(min);
+        }
         updateTrendsChart();
     }, 100);
 }
@@ -1006,8 +1165,8 @@ function updateComponentsChart() {
     const labels = nightlyData.map(night => night.date);
     const components = ['skew', 'spike', 'flatTop', 'topHeavy', 'multiPeak', 'noPause', 'inspirRate', 'multiBreath', 'ampVar'];
     const colors = [
-        '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF',
-        '#FF9F40', '#FF8C42', '#C9CBCF', '#4ECDC4'
+        '#FF6384', '#36A2EB', '#FFCE56', '#2ECC71', '#9966FF',
+        '#FF9F40', '#8B4513', '#C9CBCF', '#000000'
     ];
     
     const datasets = [];
@@ -1203,6 +1362,16 @@ function getGIClass(value) {
 
 function filterByDateRange(data, range) {
     if (range === 'all') return data;
+    if (range === 'custom') {
+        const s = document.getElementById('customStartDate')?.value;
+        const e = document.getElementById('customEndDate')?.value;
+        if (!s || !e) return data;
+        const start = new Date(s);
+        const end = new Date(e);
+        // Include entire end day
+        end.setHours(23,59,59,999);
+        return data.filter(night => new Date(night.date) >= start && new Date(night.date) <= end);
+    }
     
     const days = parseInt(range);
     const cutoffDate = new Date();
@@ -1285,6 +1454,14 @@ function filterOutliers(data) {
 }
 
 function getDateRangeTitle(range) {
+    if (range === 'custom') {
+        const s = document.getElementById('customStartDate')?.value;
+        const e = document.getElementById('customEndDate')?.value;
+        if (s && e) {
+            return `(Custom: ${formatDateLabel(new Date(s))} to ${formatDateLabel(new Date(e))})`;
+        }
+        return '(Custom)';
+    }
     switch(range) {
         case '30': return '(Last 30 Days)';
         case '60': return '(Last 60 Days)';
@@ -1299,6 +1476,28 @@ function getSmoothingTitle(smoothing) {
         case '7': return '- 7-day Moving Average';
         case '14': return '- 14-day Moving Average';
         default: return '';
+    }
+}
+
+// Helpers for custom date handling
+function formatDateISO(d) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+}
+
+function formatDateLabel(d) {
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function onDateRangeChange() {
+    const range = document.getElementById('dateRangeSelect').value;
+    const block = document.getElementById('customDateBlock');
+    if (range === 'custom') {
+        block.style.display = '';
+    } else {
+        block.style.display = 'none';
     }
 }
 
