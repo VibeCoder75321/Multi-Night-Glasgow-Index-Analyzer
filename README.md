@@ -13,7 +13,6 @@ A comprehensive tool for analyzing multiple nights of ResMed PAP data to calcula
 - **Export Capabilities**: Export results to CSV including all pressure and machine data
 - **Two Interface Options**: 
   - Web-based interface (`multi_night_analyzer.html`) - **Recommended**
-  - Desktop application (`glasgow_analyzer.py`)
 
 ## Glasgow Index Components
 
@@ -45,20 +44,6 @@ The tool analyzes 9 key components of flow limitations:
    - **Files analyzed**: DATALOG/*.edf, STR.edf, Identification.tgt, SETTINGS/*
    
    **Alternative**: Upload individual BRP.edf files (Glasgow Index only)
-
-### Desktop Application
-
-1. Install Python 3.7 or higher
-
-2. Install required dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-3. Run the application:
-   ```bash
-   python glasgow_analyzer.py
-   ```
 
 ## Usage
 
@@ -110,24 +95,6 @@ Or in OSCAR backup directories:
    - Detailed table shows all components, pressure settings, and machine data per night
    - Export to CSV includes all extracted data for spreadsheet analysis
 
-### Desktop Application Usage
-
-1. **File Selection**:
-   - Use "Select Folder" to process all EDF files in a directory tree
-   - Use "Select Files" to choose individual files
-
-2. **Analysis**:
-   - Click "Analyze" to process selected files
-   - Progress is shown in the status bar
-
-3. **Results**:
-   - **Summary Tab**: Overview statistics and component averages
-   - **Trends Tab**: Interactive matplotlib charts
-   - **Details Tab**: Comprehensive results table
-
-4. **Export**:
-   - Export to CSV for spreadsheet analysis
-   - Export to JSON for programmatic use
 
 ## Understanding Results
 
@@ -253,4 +220,5 @@ This is not a medical product. It has not been reviewed or approved by any physi
 
 - Original Glasgow Index algorithm by DaveSkvn
 - EDF parsing based on European Data Format specification
+
 - ResMed for providing accessible data format on SD cards
