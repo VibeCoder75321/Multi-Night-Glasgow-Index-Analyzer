@@ -240,6 +240,9 @@
                     <option value="7">7-day Moving Average</option>
                     <option value="14">14-day Moving Average</option>
                 </select>
+                <label style="margin-left: 10px;">
+                    <input type="checkbox" id="hideShortNights" checked onchange="updateAllCharts()"> Hide Nights &lt;4 Hours
+                </label>
                 
                 <button onclick="updateAllCharts()" style="padding: 5px 15px;">Update Charts</button>
             </div>
@@ -290,7 +293,9 @@
             <h3 style="margin-bottom: 10px;">Night Heatmap</h3>
             <div style="margin-bottom: 10px;">
                 <label for="nightSelect" style="margin-right: 8px;">Select Night:</label>
-                <select id="nightSelect" onchange="updateNightHeatmap()" style="padding: 5px 8px;"></select>
+                <button id="nightPrev" onclick="prevNight()" title="Older night" style="padding: 4px 8px; margin-right: 6px;">◀</button>
+                <select id="nightSelect" onchange="updateNightHeatmap()" style="padding: 5px 8px; margin-right: 6px;"></select>
+                <button id="nightNext" onclick="nextNight()" title="Newer night" style="padding: 4px 8px;">▶</button>
             </div>
             <div style="position: relative; height: 380px; width: 100%;">
                 <canvas id="chartTop"></canvas>
@@ -323,6 +328,10 @@
                     <th>IPAP</th>
                     <th>EPAP</th>
                     <th>Pressure Support</th>
+                    <th>EasyBreathe</th>
+                    <th>Rise Time</th>
+                    <th>Trigger</th>
+                    <th>Cycle</th>
                 </tr>
             </thead>
             <tbody id="resultsTableBody">
@@ -604,7 +613,13 @@ function analyzeFile(arrayBuffer, fileName, machineInfo = null, pressureSettings
     
     // Extract pressure data for this session date
     let sessionPressure = getSessionPressureData(pressureSettings, date);
+    // Extract additional machine settings from pressureSettings (per-date), if available
+    const sessionExtras = sessionPressure || {};
     
+    // Apply EasyBreathe logic at the session level: if On, Rise Time is N/A
+    const easyOn = (sessionExtras && typeof sessionExtras.easyBreathe === 'string' && sessionExtras.easyBreathe === 'On');
+    const finalRiseTime = easyOn ? 'N/A' : ((sessionExtras && sessionExtras.riseTime !== undefined) ? sessionExtras.riseTime : 'N/A');
+
     return {
         fileName: fileName,
         date: date,
@@ -618,7 +633,11 @@ function analyzeFile(arrayBuffer, fileName, machineInfo = null, pressureSettings
         machineType: machineInfo ? machineInfo.type : 'Unknown',
         ipap: sessionPressure ? sessionPressure.ipap : 'N/A',
         epap: sessionPressure ? sessionPressure.epap : 'N/A',
-        papMode: sessionPressure ? sessionPressure.mode : 'Unknown'
+        papMode: sessionPressure ? sessionPressure.mode : 'Unknown',
+        riseTime: finalRiseTime,
+        trigger: (sessionExtras && sessionExtras.trigger !== undefined) ? sessionExtras.trigger : 'N/A',
+        cycle: (sessionExtras && sessionExtras.cycle !== undefined) ? sessionExtras.cycle : 'N/A',
+        easyBreathe: (sessionExtras && sessionExtras.easyBreathe !== undefined) ? sessionExtras.easyBreathe : 'N/A'
     };
 }
 
@@ -728,6 +747,10 @@ function groupByNight(results) {
         let weightedIPAP = 'N/A';
         let weightedEPAP = 'N/A';
         let nightMode = 'Unknown';
+        let weightedRiseTime = 'N/A';
+        let weightedTrigger = 'N/A';
+        let weightedCycle = 'N/A';
+        let weightedEasyBreathe = 'N/A';
         
         const validIPAP = sessions.filter(s => s.ipap !== 'N/A' && !isNaN(parseFloat(s.ipap)));
         const validEPAP = sessions.filter(s => s.epap !== 'N/A' && !isNaN(parseFloat(s.epap)));
@@ -765,6 +788,43 @@ function groupByNight(results) {
                 pressureSupport = Math.round((weightedIPAP - weightedEPAP) * 10) / 10;
             }
             
+            // Compute duration-weighted extra settings if numeric
+            const validRise = sessions.filter(s => s.riseTime !== 'N/A' && !isNaN(parseFloat(s.riseTime)));
+            if (validRise.length > 0) {
+                const total = validRise.reduce((sum, s) => sum + s.duration, 0);
+                if (total > 0) {
+                    weightedRiseTime = Math.round(validRise.reduce((sum, s) => sum + parseFloat(s.riseTime) * (s.duration / total), 0));
+                }
+            }
+            const validTrig = sessions.filter(s => s.trigger !== 'N/A' && !isNaN(parseFloat(s.trigger)));
+            if (validTrig.length > 0) {
+                const total = validTrig.reduce((sum, s) => sum + s.duration, 0);
+                if (total > 0) {
+                    weightedTrigger = Math.round(validTrig.reduce((sum, s) => sum + parseFloat(s.trigger) * (s.duration / total), 0));
+                }
+            }
+            const validCycle = sessions.filter(s => s.cycle !== 'N/A' && !isNaN(parseFloat(s.cycle)));
+            if (validCycle.length > 0) {
+                const total = validCycle.reduce((sum, s) => sum + s.duration, 0);
+                if (total > 0) {
+                    weightedCycle = Math.round(validCycle.reduce((sum, s) => sum + parseFloat(s.cycle) * (s.duration / total), 0));
+                }
+            }
+            const validEB = sessions.filter(s => typeof s.easyBreathe === 'string');
+            if (validEB.length > 0) {
+                // Choose majority value by duration
+                const onDur = validEB.filter(s => s.easyBreathe === 'On').reduce((sum, s) => sum + s.duration, 0);
+                const offDur = validEB.filter(s => s.easyBreathe === 'Off').reduce((sum, s) => sum + s.duration, 0);
+                if (onDur > 0 || offDur > 0) {
+                    weightedEasyBreathe = onDur >= offDur ? 'On' : 'Off';
+                }
+            }
+
+            // Apply EasyBreathe logic at the nightly level: if On, Rise Time becomes N/A
+            if (weightedEasyBreathe === 'On') {
+                weightedRiseTime = 'N/A';
+            }
+
             nightlyData.push({
                 date: sleepNightDate,
                 startTime: sessions[0].time,
@@ -775,7 +835,11 @@ function groupByNight(results) {
                 ipap: weightedIPAP,
                 epap: weightedEPAP,
                 pressureSupport: pressureSupport,
-                papMode: nightMode
+                papMode: nightMode,
+                riseTime: weightedRiseTime,
+                trigger: weightedTrigger,
+                cycle: weightedCycle,
+                easyBreathe: weightedEasyBreathe
             });
     });
     
@@ -869,6 +933,8 @@ function populateNightSelector(nightlyData) {
     if (nightlyData.length > 0) {
         select.value = nightlyData[0].date; // most recent
     }
+    // Enable/disable nav buttons
+    updateNightNavButtons();
 }
 
 // Update heatmap when a different night is selected
@@ -878,6 +944,7 @@ function updateNightHeatmap() {
     const date = select.value;
     const night = window.originalNightlyData.find(n => n.date === date);
     if (!night) return;
+    updateNightNavButtons();
     
     // Build concatenated inspirations and render just like in most-recent function
     const sessions = getSessionsForNight(date);
@@ -904,6 +971,36 @@ function updateNightHeatmap() {
     } catch (e) {
         console.error('Heatmap render failed:', e);
     }
+}
+
+// Night navigation helpers
+function prevNight(){
+    const select = document.getElementById('nightSelect');
+    if (!select) return;
+    const idx = select.selectedIndex;
+    if (idx < select.options.length - 1){
+        select.selectedIndex = idx + 1; // list is most-recent first
+        updateNightHeatmap();
+    }
+}
+
+function nextNight(){
+    const select = document.getElementById('nightSelect');
+    if (!select) return;
+    const idx = select.selectedIndex;
+    if (idx > 0){
+        select.selectedIndex = idx - 1;
+        updateNightHeatmap();
+    }
+}
+
+function updateNightNavButtons(){
+    const select = document.getElementById('nightSelect');
+    const prev = document.getElementById('nightPrev');
+    const next = document.getElementById('nightNext');
+    if (!select || !prev || !next) return;
+    prev.disabled = (select.selectedIndex >= select.options.length - 1);
+    next.disabled = (select.selectedIndex <= 0);
 }
 
 function updateSummaryCards(nightlyData) {
@@ -959,6 +1056,12 @@ function updateTrendsChart() {
     
     // Filter data by date range
     let filteredData = filterByDateRange(window.originalNightlyData, dateRange);
+    
+    // Optionally hide nights with <4 hours duration
+    const hideShort = document.getElementById('hideShortNights')?.checked;
+    if (hideShort) {
+        filteredData = filteredData.filter(n => (n.duration || 0) >= 4.0);
+    }
     
     // Sort chronologically for proper trend visualization
     filteredData.sort((a, b) => new Date(a.date) - new Date(b.date));
@@ -1157,6 +1260,12 @@ function updateComponentsChart() {
     // Filter data by date range
     let filteredData = filterByDateRange(window.originalComponentData, dateRange);
     
+    // Optionally hide nights with <4 hours duration
+    const hideShort = document.getElementById('hideShortNights')?.checked;
+    if (hideShort) {
+        filteredData = filteredData.filter(n => (n.duration || 0) >= 4.0);
+    }
+    
     // Sort chronologically for proper trend visualization
     filteredData.sort((a, b) => new Date(a.date) - new Date(b.date));
     
@@ -1329,6 +1438,10 @@ function createResultsTable(nightlyData) {
             <td>${night.ipap !== 'N/A' ? night.ipap : 'N/A'}</td>
             <td>${night.epap !== 'N/A' ? night.epap : 'N/A'}</td>
             <td>${night.pressureSupport !== 'N/A' ? night.pressureSupport : 'N/A'}</td>
+            <td>${night.easyBreathe !== 'N/A' ? night.easyBreathe : 'N/A'}</td>
+            <td>${night.riseTime !== 'N/A' ? night.riseTime : 'N/A'}</td>
+            <td>${night.trigger !== 'N/A' ? sensitivityLabelFromValue(night.trigger) : 'N/A'}</td>
+            <td>${night.cycle !== 'N/A' ? sensitivityLabelFromValue(night.cycle) : 'N/A'}</td>
         `;
         
         tbody.appendChild(row);
@@ -1610,9 +1723,9 @@ async function parseSTRFile(file) {
 }
 
 function extractPressureFromSTR(fileData) {
-    // Extract pressure and mode data from STR file signals
+    // Extract pressure, mode, and key machine settings from STR file signals
     const pressureData = {
-        dailyData: {},  // Date -> {ipap, epap, mode}
+        dailyData: {},  // Date -> {ipap, epap, mode, riseTime, trigger, cycle, easyBreathe}
         defaultMode: 'Unknown'
     };
     
@@ -1630,11 +1743,16 @@ function extractPressureFromSTR(fileData) {
         console.log(`Signal ${index}: "${signal.label}" (${signal.physDimension}) - ${signal.physicalValues ? signal.physicalValues.length : 0} samples`);
     });
     
-    // Find key signals for pressure and mode data
+    // Find key signals for pressure, mode, and additional settings
     const targetIPAPSignal = fileData.signals.find(s => s.label && s.label.includes('TgtIPAP.50'));
     const targetEPAPSignal = fileData.signals.find(s => s.label && s.label.includes('TgtEPAP.50'));
     const modeSignal = fileData.signals.find(s => s.label && s.label.includes('Mode'));
     const dateSignal = fileData.signals.find(s => s.label && s.label.includes('Date'));
+    // Additional BiPAP settings
+    const riseTimeSignal = fileData.signals.find(s => s.label && s.label.includes('S.RiseTime'));
+    const triggerSignal = fileData.signals.find(s => s.label && s.label.includes('S.Trigger'));
+    const cycleSignal = fileData.signals.find(s => s.label && s.label.includes('S.Cycle'));
+    const easyBreatheSignal = fileData.signals.find(s => s.label && s.label.includes('S.EasyBreathe'));
     
     // Look for EPR-related signals for AirSense machines
     const eprLevelSignal = fileData.signals.find(s => s.label && s.label.includes('S.EPR.Level'));
@@ -1652,7 +1770,11 @@ function extractPressureFromSTR(fileData) {
         date: dateSignal ? dateSignal.label : 'Not found',
         eprLevel: eprLevelSignal ? eprLevelSignal.label : 'Not found',
         eprEnable: eprEnableSignal ? eprEnableSignal.label : 'Not found',
-        cpapPress: cpapPressSignal ? cpapPressSignal.label : 'Not found'
+        cpapPress: cpapPressSignal ? cpapPressSignal.label : 'Not found',
+        riseTime: riseTimeSignal ? riseTimeSignal.label : 'Not found',
+        trigger: triggerSignal ? triggerSignal.label : 'Not found',
+        cycle: cycleSignal ? cycleSignal.label : 'Not found',
+        easyBreathe: easyBreatheSignal ? easyBreatheSignal.label : 'Not found'
     });
     
     console.log('Machine type analysis:', {
@@ -1882,12 +2004,22 @@ function extractPressureFromSTR(fileData) {
         console.log('EPAP (CPAP - EPR):', epapValues.slice(0, 5));
     }
     const modeValues = modeSignal ? (modeSignal.physicalValues || modeSignal.digitalValues || []) : [];
+    const riseTimeValues = riseTimeSignal ? (riseTimeSignal.physicalValues || riseTimeSignal.digitalValues || []) : [];
+    const triggerValues = triggerSignal ? (triggerSignal.physicalValues || triggerSignal.digitalValues || []) : [];
+    const cycleValues = cycleSignal ? (cycleSignal.physicalValues || cycleSignal.digitalValues || []) : [];
+    const easyBreatheValuesRaw = easyBreatheSignal ? (easyBreatheSignal.physicalValues || easyBreatheSignal.digitalValues || []) : [];
+    // Normalize EasyBreathe values into 'On'/'Off'
+    const easyBreatheValues = easyBreatheValuesRaw.map(v => (parseInt(v) ? 'On' : 'Off'));
     
     console.log('Data arrays lengths:', {
         dates: dates.length,
         ipap: ipapValues.length,
         epap: epapValues.length,
-        mode: modeValues.length
+        mode: modeValues.length,
+        riseTime: riseTimeValues.length,
+        trigger: triggerValues.length,
+        cycle: cycleValues.length,
+        easyBreathe: easyBreatheValues.length
     });
     
     // Debug: Show first few date values to understand the format
@@ -1900,6 +2032,10 @@ function extractPressureFromSTR(fileData) {
         const ipapValue = parseFloat(ipapValues[i]);
         const epapValue = parseFloat(epapValues[i]);
         let modeValue = modeValues.length > i ? modeValues[i] : 0;
+        let riseTimeValue = riseTimeValues.length > i ? riseTimeValues[i] : undefined;
+        const triggerValue = triggerValues.length > i ? triggerValues[i] : undefined;
+        const cycleValue = cycleValues.length > i ? cycleValues[i] : undefined;
+        const easyBreatheValue = easyBreatheValues.length > i ? easyBreatheValues[i] : undefined;
         
         // Convert date from various possible formats
         let dateStr = '';
@@ -1937,12 +2073,25 @@ function extractPressureFromSTR(fileData) {
         
         // Convert mode number to text
         let modeText = convertModeNumberToText(parseInt(modeValue));
+        // Normalize additional settings to readable forms
+        // If EasyBreathe is On, force rise time to undefined (to be rendered as N/A)
+        if (easyBreatheValue === 'On') {
+            riseTimeValue = undefined;
+        }
+        const riseTimeOut = riseTimeValue !== undefined ? parseFloat(riseTimeValue) : undefined;
+        const triggerOut = triggerValue !== undefined ? parseInt(triggerValue) : undefined;
+        const cycleOut = cycleValue !== undefined ? parseInt(cycleValue) : undefined;
+        const easyBreatheOut = easyBreatheValue !== undefined ? easyBreatheValue : undefined;
         
         if (dateStr && !isNaN(ipapValue) && !isNaN(epapValue) && ipapValue > 0 && epapValue > 0) {
             pressureData.dailyData[dateStr] = {
                 ipap: Math.round(ipapValue * 10) / 10,
                 epap: Math.round(epapValue * 10) / 10,
-                mode: modeText
+                mode: modeText,
+                riseTime: riseTimeOut,
+                trigger: triggerOut,
+                cycle: cycleOut,
+                easyBreathe: easyBreatheOut
             };
             
             // Set default mode from first valid entry
@@ -1971,6 +2120,18 @@ function convertModeNumberToText(modeNum) {
     };
     
     return modeMap[modeNum] || `Mode ${modeNum}`;
+}
+
+function sensitivityLabelFromValue(value) {
+    const map = {
+        4: 'very high',
+        3: 'high',
+        2: 'medium',
+        1: 'low',
+        0: 'very low'
+    };
+    const n = parseInt(value);
+    return (n in map) ? map[n] : (value !== undefined && value !== null ? String(value) : 'N/A');
 }
 
 function getSessionPressureData(pressureSettings, sessionDate) {
@@ -2126,7 +2287,11 @@ function exportNightlyCSV() {
         'Variable Amp',
         'IPAP',
         'EPAP',
-        'Pressure Support'
+        'Pressure Support',
+        'EasyBreathe',
+        'Rise Time',
+        'Trigger',
+        'Cycle'
     ];
     
     // Create CSV rows
@@ -2148,7 +2313,11 @@ function exportNightlyCSV() {
         night.weightedGI.ampVar.toFixed(2),
         night.ipap !== 'N/A' ? night.ipap.toString() : 'N/A',
         night.epap !== 'N/A' ? night.epap.toString() : 'N/A',
-        night.pressureSupport !== 'N/A' ? night.pressureSupport.toString() : 'N/A'
+        night.pressureSupport !== 'N/A' ? night.pressureSupport.toString() : 'N/A',
+        (night.easyBreathe !== 'N/A' ? night.easyBreathe.toString() : 'N/A'),
+        (night.riseTime !== 'N/A' ? night.riseTime.toString() : 'N/A'),
+        (night.trigger !== 'N/A' ? night.trigger.toString() : 'N/A'),
+        (night.cycle !== 'N/A' ? night.cycle.toString() : 'N/A')
     ]);
     
     // Combine headers and rows
