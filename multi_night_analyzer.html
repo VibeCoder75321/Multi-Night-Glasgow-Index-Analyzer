@@ -144,6 +144,33 @@
     .gi-fair { background-color: #fff3cd; color: #856404; }
     .gi-poor { background-color: #f8d7da; color: #721c24; }
     .gi-very-poor { background-color: #f5c6cb; color: #491217; }
+    
+    /* Header info pills */
+    .info-pills {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        justify-content: center;
+        margin-top: 10px;
+    }
+    .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 10px;
+        border-radius: 999px;
+        font-size: 12px;
+        border: 1px solid #e0e0e0;
+        background: #fafafa;
+        color: #333;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+    }
+    .pill a { color: #007bff; text-decoration: none; }
+    .pill a:hover { text-decoration: underline; }
+    .pill--contact { border-color: #cfe2ff; background: #f0f6ff; }
+    .pill--privacy { border-color: #d1e7dd; background: #f3fff6; }
+    .pill--source { border-color: #ffe69c; background: #fff9e6; }
+    .ack-line { margin-top: 8px; font-size: 12px; color: #666; }
 </style>
 
 </head>
@@ -153,12 +180,12 @@
     <div class="header">
         <h1>Multi-Night Glasgow Index Analyzer</h1>
         <p>Analyze multiple nights of ResMed PAP data to track Glasgow Index trends and component analysis</p>
-        <div style="margin-top: 8px; font-size: 13px; color: #555;">
-            <div>Contact: <a href="mailto:vibecoder75321@gmail.com">vibecoder75321@gmail.com</a></div>
-            <div>Privacy: All files are processed locally in your web browser; no data is uploaded or sent to any server.</div>
-            <div>Source: <a href="https://github.com/VibeCoder75321/Multi-Night-Glasgow-Index-Analyzer" target="_blank" rel="noopener noreferrer">github.com/VibeCoder75321/Multi-Night-Glasgow-Index-Analyzer</a></div>
-            <div>Acknowledgment: Original Glasgow Index by <a href="https://github.com/DaveSkvn/GlasgowIndex" target="_blank" rel="noopener noreferrer">DaveSkvn</a></div>
+        <div class="info-pills">
+            <span class="pill pill--contact">📬 <a href="mailto:vibecoder75321@gmail.com">vibecoder75321@gmail.com</a></span>
+            <span class="pill pill--privacy">🔒 All processing happens locally in your browser</span>
+            <span class="pill pill--source">🔗 <a href="https://github.com/VibeCoder75321/Multi-Night-Glasgow-Index-Analyzer" target="_blank" rel="noopener noreferrer">Project on GitHub</a></span>
         </div>
+        <div class="ack-line">Acknowledgment: Original Glasgow Index by <a href="https://github.com/DaveSkvn/GlasgowIndex" target="_blank" rel="noopener noreferrer">DaveSkvn</a></div>
     </div>
     
           <div class="upload-section" id="uploadSection">
@@ -191,11 +218,6 @@
               </div>
           </div>
           
-          <div style="text-align: center; margin: 15px 0; padding: 15px; background: #e7f3ff; border-radius: 8px; border-left: 4px solid #007bff;">
-              <p style="margin: 0; font-size: 14px;">
-                  <strong>💡 How to upload entire SD card:</strong> Insert your ResMed SD card, click "Choose Files", select the SD card root folder (usually named after your machine), and click "Upload". This ensures complete analysis with pressure settings and machine information.
-              </p>
-          </div>
           
           <div class="file-count" id="fileCount">No files selected</div>
           <div class="progress-bar" id="progressBar" style="display: none;">
@@ -354,7 +376,7 @@
     </div>
     <div style="font-size: 14px; color: #222; line-height: 1.6;">
         <div style="background:#f8f9fa; border:1px solid #e9ecef; border-radius:8px; padding:12px;">
-            <div style="font-weight:bold; margin-bottom:6px;">What’s new</div>
+            <div style="font-weight:bold; margin-bottom:6px;">What's new</div>
             <ul style="margin:0 0 8px 18px;">
                 <li>STR.edf settings extraction: <code>S.RiseTime</code>, <code>S.Trigger</code>, <code>S.Cycle</code>, <code>S.EasyBreathe</code></li>
                 <li>Per-night display and CSV export for the above machine settings</li>
