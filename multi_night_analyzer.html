@@ -368,35 +368,30 @@
     </div>
 </div>
 
-<!-- Change Log -->
+<!-- Release Notes (collapsed by default) -->
 <div class="container" style="margin-top: 16px;">
-    <div class="header" style="border: none; margin-bottom: 6px; padding-bottom: 0;">
-        <h2 style="margin: 0; font-size: 20px;">Release Notes</h2>
-        <div style="font-size: 12px; color: #666; margin-top: 4px;">Updated: 2025-09-27</div>
-    </div>
-    <div style="font-size: 14px; color: #222; line-height: 1.6;">
-        <div style="background:#f8f9fa; border:1px solid #e9ecef; border-radius:8px; padding:12px;">
-            <div style="font-weight:bold; margin-bottom:6px;">What's new</div>
-            <ul style="margin:0 0 8px 18px;">
-                <li>STR.edf settings extraction: <code>S.RiseTime</code>, <code>S.Trigger</code>, <code>S.Cycle</code>, <code>S.EasyBreathe</code></li>
-                <li>Per-night Glasgow Index Heatmap display and CSV export for the above machine settings</li>
-            </ul>
-            <div style="font-weight:bold; margin-bottom:6px;">Improvements</div>
-            <ul style="margin:0 0 8px 18px;">
-                <li>EasyBreathe-aware logic: when EasyBreathe is <strong>On</strong>, Rise Time is shown as <strong>N/A</strong></li>
-                <li>Trigger/Cycle now include readable labels: 4=very high, 3=high, 2=medium, 1=low, 0=very low</li>
-                <li>Results table and CSV reordered to: Pressure Support, EasyBreathe, Rise Time, Trigger, Cycle</li>
-            </ul>
-            <div style="font-weight:bold; margin-bottom:6px;">UX</div>
-            <ul style="margin:0 0 8px 18px;">
-                <li>Header now includes contact, privacy note (local-only processing), source link, and acknowledgment</li>
-            </ul>
-            <div style="font-weight:bold; margin-bottom:6px;">Notes</div>
-            <ul style="margin:0 0 0 18px;">
-                <li>All processing happens locally in your browser — no uploads, no servers</li>
-            </ul>
+    <details>
+        <summary style="cursor:pointer; font-weight:600;">Release Notes — Updated: <span id="releaseNotesDate">2025-09-27</span></summary>
+        <div style="margin-top:10px; font-size: 14px; color: #222; line-height: 1.6;">
+            <div style="background:#f8f9fa; border:1px solid #e9ecef; border-radius:8px; padding:12px;">
+                <div style="font-weight:bold; margin-bottom:6px;">What's new</div>
+                <ul style="margin:0 0 8px 18px;">
+                    <li>STR.edf settings extraction: <code>S.RiseTime</code>, <code>S.Trigger</code>, <code>S.Cycle</code>, <code>S.EasyBreathe</code></li>
+                    <li>Per-night display and CSV export for machine settings</li>
+                </ul>
+                <div style="font-weight:bold; margin-bottom:6px;">Improvements</div>
+                <ul style="margin:0 0 8px 18px;">
+                    <li>When EasyBreathe is <strong>On</strong>, Rise Time is shown as <strong>N/A</strong></li>
+                    <li>Trigger/Cycle labels: 4=very high, 3=high, 2=medium, 1=low, 0=very low</li>
+                    <li>Table/CSV order: Pressure Support, EasyBreathe, Rise Time, Trigger, Cycle</li>
+                </ul>
+                <div style="font-weight:bold; margin-bottom:6px;">UX</div>
+                <ul style="margin:0 0 8px 18px;">
+                    <li>Header pills for contact, privacy, source, plus acknowledgment</li>
+                </ul>
+            </div>
         </div>
-    </div>
+    </details>
 </div>
 
 <script type="text/javascript">
