@@ -328,6 +328,17 @@
             <div style="position: relative; height: 380px; width: 100%;">
                 <canvas id="chartTop"></canvas>
             </div>
+            <div style="margin-top: 16px;">
+                <h4 style="margin: 0 0 8px 0; font-size: 16px;">Waveform Detail</h4>
+                <div style="position: relative; height: 320px; width: 100%; background: #fff; border: 1px solid #e0e0e0; border-radius: 6px; padding: 12px; box-sizing: border-box;">
+                    <canvas id="chartDetail" style="height: 100%;"></canvas>
+                </div>
+                <div style="display: flex; align-items: center; gap: 12px; justify-content: center; margin-top: 10px;">
+                    <button id="backBtn" onclick="showDetailBack()" style="padding: 6px 12px; visibility: hidden;">◀◀ Back</button>
+                    <button id="fwdBtn" onclick="showDetailForward()" style="padding: 6px 12px; visibility: hidden;">Forward ▶▶</button>
+                    <span style="font-size: 12px; color: #555;">Click the heatmap to load one minute of waveform detail.</span>
+                </div>
+            </div>
         </div>
 
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
@@ -647,6 +658,21 @@ function analyzeFile(arrayBuffer, fileName, machineInfo = null, pressureSettings
     prepIdealFlow(dataArray, results);
     inspirationAmplitude(dataArray, results);
     results.cumIndex = prepIndices(results);
+
+    if (typeof flowBalance === 'function') {
+        try {
+            window.dataArray = dataArray;
+            window.results = results;
+            flowBalance();
+        } catch (err) {
+            console.warn('flowBalance() failed for session', fileName, err);
+            results.flowImbalance = [];
+        }
+    }
+
+    if (!Array.isArray(results.flowImbalance)) {
+        results.flowImbalance = [];
+    }
     
     // Calculate session duration in hours
     const durationMs = dataArray.length * 40; // 40ms per sample
@@ -684,6 +710,9 @@ function analyzeFile(arrayBuffer, fileName, machineInfo = null, pressureSettings
         inspirationCount: results.inspirations ? results.inspirations.length : 0,
         inspirations: results.inspirations || [],
         sampleCount: (results.inspirations && results.inspirations.length > 0) ? results.inspirations[results.inspirations.length - 1].end : (dataArray ? dataArray.length : 0),
+        dataArray: dataArray,
+        idealArray: results.idealArray || [],
+        flowImbalance: results.flowImbalance || [],
         machineType: machineInfo ? machineInfo.type : 'Unknown',
         ipap: sessionPressure ? sessionPressure.ipap : 'N/A',
         epap: sessionPressure ? sessionPressure.epap : 'N/A',
@@ -900,54 +929,126 @@ function groupByNight(results) {
     return nightlyData.sort((a, b) => new Date(b.date) - new Date(a.date)); // Most recent first
 }
 
-// Build and render heatmap for the most recent night by concatenating sessions
-function renderMostRecentNightHeatmap(nightlyData) {
-    if (!nightlyData || nightlyData.length === 0) return;
-    
-    // Most recent night is first due to sorting in groupByNight
-    const mostRecentNightDate = nightlyData[0].date;
-    const nightlyWeighted = nightlyData[0].weightedGI;
-    
-    // Collect sessions that belong to this sleep night
-    const sessions = getSessionsForNight(mostRecentNightDate);
-    if (!sessions || sessions.length === 0) return;
-    
-    // Sort by start time
-    sessions.sort((a, b) => new Date(a.startDateTime) - new Date(b.startDateTime));
-    
-    // Concatenate inspirations, adjusting sample indices
+function resetHeatmapCanvas() {
+    const canvas = document.getElementById('chartTop');
+    if (!canvas || !canvas.parentNode) return;
+    const newCanvas = canvas.cloneNode(true);
+    canvas.parentNode.replaceChild(newCanvas, canvas);
+}
+
+function buildNightHeatmapPayload(sessions, nightlyWeighted) {
+    const aggregatedDataArray = [];
+    const aggregatedIdealArray = [];
+    const aggregatedInspirations = [];
+    const aggregatedFlowImbalance = [];
     let sampleOffset = 0;
-    const concatenatedInspirations = [];
+    let inspirationOffset = 0;
+
     sessions.forEach(session => {
-        if (!session.inspirations || session.inspirations.length === 0) return;
-        session.inspirations.forEach(insp => {
-            concatenatedInspirations.push({
-                start: (insp.start || 0) + sampleOffset,
-                end: (insp.end || 0) + sampleOffset,
-                indices: insp.indices
+        if (!session) return;
+
+        const sessionData = Array.isArray(session.dataArray) ? session.dataArray : [];
+        const sessionIdeal = Array.isArray(session.idealArray) ? session.idealArray : [];
+        const sessionInspirations = Array.isArray(session.inspirations) ? session.inspirations : [];
+        const sessionFlowImbalance = Array.isArray(session.flowImbalance) ? session.flowImbalance : [];
+
+        if (sessionData.length > 0) {
+            aggregatedDataArray.push(...sessionData);
+        }
+
+        if (sessionIdeal.length === sessionData.length && sessionIdeal.length > 0) {
+            aggregatedIdealArray.push(...sessionIdeal);
+        } else if (sessionData.length > 0) {
+            aggregatedIdealArray.push(...sessionData.map(point => ({ x: point.x, y: 0 })));
+        }
+
+        sessionInspirations.forEach(insp => {
+            if (!insp) return;
+            const adjusted = { ...insp };
+            adjusted.start = (insp.start || 0) + sampleOffset;
+            adjusted.end = (insp.end || 0) + sampleOffset;
+            aggregatedInspirations.push(adjusted);
+        });
+
+        sessionFlowImbalance.forEach(zone => {
+            if (!zone) return;
+            aggregatedFlowImbalance.push({
+                start: (zone.start || 0) + sampleOffset,
+                inspirPtr: (zone.inspirPtr || 0) + inspirationOffset
             });
         });
-        // Advance offset by this session's length in samples
-        const sessionSamples = session.sampleCount || (session.inspirations[session.inspirations.length - 1]?.end || 0);
-        sampleOffset += sessionSamples;
+
+        const sessionSampleLength = sessionData.length > 0
+            ? sessionData.length
+            : (typeof session.sampleCount === 'number' ? session.sampleCount : 0);
+
+        sampleOffset += sessionSampleLength;
+        inspirationOffset += sessionInspirations.length;
     });
-    
-    // Prepare globals expected by original displayHeatMap()
-    window.startDateTime = new Date(sessions[0].startDateTime);
-    // Provide a placeholder dataArray so click detail handler is safe if used
-    window.dataArray = new Float32Array(Math.max(sampleOffset, 1));
-    
-    // Use duration-weighted nightly components for the labels on the left
-    const resultsForHeatmap = {
-        inspirations: concatenatedInspirations,
-        cumIndex: nightlyWeighted
+
+    const idealArray = aggregatedIdealArray.length > 0
+        ? aggregatedIdealArray
+        : aggregatedDataArray.map(point => ({ x: point.x, y: 0 }));
+
+    return {
+        dataArray: aggregatedDataArray,
+        results: {
+            inspirations: aggregatedInspirations,
+            cumIndex: nightlyWeighted,
+            idealArray: idealArray,
+            flowImbalance: aggregatedFlowImbalance
+        }
     };
-    
+}
+
+function renderHeatmapForSessions(sessions, nightlyWeighted) {
+    const payload = buildNightHeatmapPayload(sessions, nightlyWeighted);
+    if (!payload || !payload.results || !Array.isArray(payload.results.inspirations) || payload.results.inspirations.length === 0) {
+        console.warn('No inspirations available to render heatmap for selected night.');
+        return;
+    }
+
+    resetHeatmapCanvas();
+
+    const firstSession = sessions[0];
+    if (firstSession && firstSession.startDateTime) {
+        window.startDateTime = new Date(firstSession.startDateTime);
+    }
+
+    window.dataArray = payload.dataArray;
+    window.results = payload.results;
+
+    if (!Array.isArray(window.results.flowImbalance)) {
+        window.results.flowImbalance = [];
+    }
+
+    if (!Array.isArray(window.results.idealArray) || window.results.idealArray.length !== window.dataArray.length) {
+        window.results.idealArray = window.dataArray.map(point => ({ x: point.x, y: 0 }));
+    }
+
     try {
-        displayHeatMap(resultsForHeatmap);
+        displayHeatMap(window.results);
     } catch (e) {
         console.error('Heatmap render failed:', e);
     }
+}
+
+// Build and render heatmap for the most recent night by concatenating sessions
+function renderMostRecentNightHeatmap(nightlyData) {
+    if (!nightlyData || nightlyData.length === 0) return;
+
+    // Most recent night is first due to sorting in groupByNight
+    const mostRecentNightDate = nightlyData[0].date;
+    const nightlyWeighted = nightlyData[0].weightedGI;
+
+    // Collect sessions that belong to this sleep night
+    const sessions = getSessionsForNight(mostRecentNightDate);
+    if (!sessions || sessions.length === 0) return;
+
+    // Sort by start time
+    sessions.sort((a, b) => new Date(a.startDateTime) - new Date(b.startDateTime));
+
+    renderHeatmapForSessions(sessions, nightlyWeighted);
 }
 
 // Helper: find sessions in nightlyResults that map to the given sleep night date
@@ -1000,31 +1101,11 @@ function updateNightHeatmap() {
     if (!night) return;
     updateNightNavButtons();
     
-    // Build concatenated inspirations and render just like in most-recent function
+    // Build concatenated inspirations and render with actual waveform data
     const sessions = getSessionsForNight(date);
     if (!sessions || sessions.length === 0) return;
     sessions.sort((a, b) => new Date(a.startDateTime) - new Date(b.startDateTime));
-    let sampleOffset = 0;
-    const concatenatedInspirations = [];
-    sessions.forEach(session => {
-        if (!session.inspirations) return;
-        session.inspirations.forEach(insp => {
-            concatenatedInspirations.push({
-                start: (insp.start || 0) + sampleOffset,
-                end: (insp.end || 0) + sampleOffset,
-                indices: insp.indices
-            });
-        });
-        const sessionSamples = session.sampleCount || (session.inspirations[session.inspirations.length - 1]?.end || 0);
-        sampleOffset += sessionSamples;
-    });
-    window.startDateTime = new Date(sessions[0].startDateTime);
-    window.dataArray = new Float32Array(Math.max(sampleOffset, 1));
-    try {
-        displayHeatMap({ inspirations: concatenatedInspirations, cumIndex: night.weightedGI });
-    } catch (e) {
-        console.error('Heatmap render failed:', e);
-    }
+    renderHeatmapForSessions(sessions, night.weightedGI);
 }
 
 // Night navigation helpers
