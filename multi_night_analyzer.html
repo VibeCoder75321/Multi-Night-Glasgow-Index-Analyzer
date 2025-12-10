@@ -371,22 +371,24 @@
 <!-- Release Notes (collapsed by default) -->
 <div class="container" style="margin-top: 16px;">
     <details>
-        <summary style="cursor:pointer; font-weight:600;">Release Notes — Updated: <span id="releaseNotesDate">2025-09-27</span></summary>
+        <summary style="cursor:pointer; font-weight:600;">Release Notes — Updated: <span id="releaseNotesDate">2025-12-10</span></summary>
         <div style="margin-top:10px; font-size: 14px; color: #222; line-height: 1.6;">
+            <div style="background:#f8f9fa; border:1px solid #e9ecef; border-radius:8px; padding:12px; margin-bottom:12px;">
+                <div style="font-weight:bold; margin-bottom:6px;">2025-12-10</div>
+                <ul style="margin:0 0 8px 18px;">
+                    <li><strong>Improved sleep night grouping:</strong> Sessions are now grouped by DATALOG folder date instead of filename timestamp heuristics</li>
+                    <li>When uploading an SD card folder, the folder name (e.g., <code>DATALOG/20250724/</code>) determines which night a session belongs to</li>
+                    <li>This correctly handles sessions that cross midnight — all data stays grouped under the night you went to sleep</li>
+                    <li>Individual file uploads still use time-based fallback for backward compatibility</li>
+                </ul>
+            </div>
             <div style="background:#f8f9fa; border:1px solid #e9ecef; border-radius:8px; padding:12px;">
-                <div style="font-weight:bold; margin-bottom:6px;">What's new</div>
+                <div style="font-weight:bold; margin-bottom:6px;">2025-09-27</div>
                 <ul style="margin:0 0 8px 18px;">
                     <li>STR.edf settings extraction: <code>S.RiseTime</code>, <code>S.Trigger</code>, <code>S.Cycle</code>, <code>S.EasyBreathe</code></li>
                     <li>Per-night display and CSV export for machine settings</li>
-                </ul>
-                <div style="font-weight:bold; margin-bottom:6px;">Improvements</div>
-                <ul style="margin:0 0 8px 18px;">
                     <li>When EasyBreathe is <strong>On</strong>, Rise Time is shown as <strong>N/A</strong></li>
                     <li>Trigger/Cycle labels: 4=very high, 3=high, 2=medium, 1=low, 0=very low</li>
-                    <li>Table/CSV order: Pressure Support, EasyBreathe, Rise Time, Trigger, Cycle</li>
-                </ul>
-                <div style="font-weight:bold; margin-bottom:6px;">UX</div>
-                <ul style="margin:0 0 8px 18px;">
                     <li>Header pills for contact, privacy, source, plus acknowledgment</li>
                 </ul>
             </div>
@@ -505,12 +507,30 @@ function handleFiles(files) {
         return;
     }
     
-    // Group files by night to show better summary
+    // Extract folder-based sleep night date from webkitRelativePath if available
+    // Path format: DATALOG/20250724/20250724_232010_BRP.edf
+    // The folder name (20250724) represents the sleep night, even if file timestamps cross midnight
+    function extractFolderDate(file) {
+        if (file.webkitRelativePath) {
+            // Match folder name in format YYYYMMDD from path like "DATALOG/20250724/filename.edf"
+            const pathMatch = file.webkitRelativePath.match(/\/(\d{8})\//);
+            if (pathMatch) {
+                return pathMatch[1];
+            }
+        }
+        return null;
+    }
+    
+    // Group files by night to show better summary (prefer folder date over filename date)
     const nightGroups = {};
     brpFiles.forEach(file => {
-        const match = file.name.match(/(\d{8})_/);
-        if (match) {
-            const date = match[1];
+        // Try folder date first, fall back to filename date
+        let date = extractFolderDate(file);
+        if (!date) {
+            const match = file.name.match(/(\d{8})_/);
+            if (match) date = match[1];
+        }
+        if (date) {
             if (!nightGroups[date]) nightGroups[date] = 0;
             nightGroups[date]++;
         }
@@ -537,6 +557,12 @@ function handleFiles(files) {
     }
     
     document.getElementById('fileCount').textContent = countText;
+    
+    // Attach folder date to each file for use during processing
+    brpFiles.forEach(file => {
+        file._folderDate = extractFolderDate(file);
+    });
+    
     processFiles(brpFiles, identificationFiles, strFiles);
 }
 
@@ -609,7 +635,8 @@ function processFile(file, machineInfo = null, pressureSettings = null) {
         reader.onload = function(event) {
             try {
                 const arrayBuffer = event.target.result;
-                const result = analyzeFile(arrayBuffer, file.name, machineInfo, pressureSettings);
+                // Pass folder date for accurate sleep night grouping
+                const result = analyzeFile(arrayBuffer, file.name, machineInfo, pressureSettings, file._folderDate);
                 resolve(result);
             } catch (error) {
                 console.error(`Error processing file ${file.name}:`, error);
@@ -625,7 +652,7 @@ function processFile(file, machineInfo = null, pressureSettings = null) {
     });
 }
 
-function analyzeFile(arrayBuffer, fileName, machineInfo = null, pressureSettings = null) {
+function analyzeFile(arrayBuffer, fileName, machineInfo = null, pressureSettings = null, folderDate = null) {
     // Parse EDF file
     const fileData = parseEDFFile(arrayBuffer);
     if (fileData.formatVersion !== "0") {
@@ -652,7 +679,7 @@ function analyzeFile(arrayBuffer, fileName, machineInfo = null, pressureSettings
     const durationMs = dataArray.length * 40; // 40ms per sample
     const durationHours = durationMs / (1000 * 60 * 60);
     
-    // Extract date and time from filename
+    // Extract date and time from filename (for session timestamp display)
     const match = fileName.match(/(\d{8})_(\d{6})_BRP\.edf/);
     let date = 'Unknown';
     let time = 'Unknown';
@@ -663,6 +690,34 @@ function analyzeFile(arrayBuffer, fileName, machineInfo = null, pressureSettings
         
         date = `${dateStr.slice(0,4)}-${dateStr.slice(4,6)}-${dateStr.slice(6,8)}`;
         time = `${timeStr.slice(0,2)}:${timeStr.slice(2,4)}:${timeStr.slice(4,6)}`;
+    }
+    
+    // Determine sleep night date: prefer folder date (from DATALOG/YYYYMMDD/ structure)
+    // The folder name represents the night the user went to sleep, even if the session
+    // crosses midnight. Fall back to heuristic-based calculation if no folder date.
+    let sleepNightDate;
+    if (folderDate) {
+        // Use folder date directly - format as YYYY-MM-DD
+        sleepNightDate = `${folderDate.slice(0,4)}-${folderDate.slice(4,6)}-${folderDate.slice(6,8)}`;
+    } else {
+        // Fallback: calculate from session start time using heuristics
+        // Sessions 6 PM - midnight = current date's night
+        // Sessions midnight - noon = previous date's night
+        const sessionDateTime = fileData.startDateTime;
+        if (sessionDateTime) {
+            const sessionHour = sessionDateTime.getHours();
+            if (sessionHour >= 18) {
+                sleepNightDate = date;
+            } else if (sessionHour < 12) {
+                const prevDate = new Date(sessionDateTime);
+                prevDate.setDate(prevDate.getDate() - 1);
+                sleepNightDate = prevDate.toISOString().split('T')[0];
+            } else {
+                sleepNightDate = date;
+            }
+        } else {
+            sleepNightDate = date;
+        }
     }
     
     // Extract pressure data for this session date
@@ -678,6 +733,7 @@ function analyzeFile(arrayBuffer, fileName, machineInfo = null, pressureSettings
         fileName: fileName,
         date: date,
         time: time,
+        sleepNightDate: sleepNightDate,  // The night this session belongs to (from folder or heuristic)
         startDateTime: fileData.startDateTime,
         duration: durationHours,
         cumIndex: results.cumIndex,
@@ -724,25 +780,9 @@ function groupByNight(results) {
     const grouped = {};
     
     results.forEach(result => {
-        // Convert sessions to sleep nights
-        // Sessions starting between 6 PM and 11:59 PM belong to that date's night
-        // Sessions starting between 12:00 AM and 11:59 AM belong to previous date's night
-        const sessionDateTime = new Date(result.startDateTime);
-        const sessionHour = sessionDateTime.getHours();
-        
-        let sleepNightDate;
-        if (sessionHour >= 18) {
-            // Evening session (6 PM - 11:59 PM) - belongs to current date's night
-            sleepNightDate = result.date;
-        } else if (sessionHour < 12) {
-            // Morning session (12:00 AM - 11:59 AM) - belongs to previous date's night
-            const prevDate = new Date(sessionDateTime);
-            prevDate.setDate(prevDate.getDate() - 1);
-            sleepNightDate = prevDate.toISOString().split('T')[0];
-        } else {
-            // Afternoon session (12:00 PM - 5:59 PM) - unusual, but belongs to current date
-            sleepNightDate = result.date;
-        }
+        // Use pre-calculated sleepNightDate (from folder name or heuristic fallback)
+        // The folder structure DATALOG/YYYYMMDD/ already groups sessions by sleep night
+        const sleepNightDate = result.sleepNightDate || result.date;
         
         if (!grouped[sleepNightDate]) {
             grouped[sleepNightDate] = [];
@@ -954,23 +994,10 @@ function renderMostRecentNightHeatmap(nightlyData) {
 function getSessionsForNight(sleepNightDate) {
     if (!nightlyResults || nightlyResults.length === 0) return [];
     
-    const sessions = [];
-    nightlyResults.forEach(result => {
-        const sessionDateTime = new Date(result.startDateTime);
-        const sessionHour = sessionDateTime.getHours();
-        let nightDate;
-        if (sessionHour >= 18) {
-            nightDate = result.date;
-        } else if (sessionHour < 12) {
-            const prevDate = new Date(sessionDateTime);
-            prevDate.setDate(prevDate.getDate() - 1);
-            nightDate = prevDate.toISOString().split('T')[0];
-        } else {
-            nightDate = result.date;
-        }
-        if (nightDate === sleepNightDate) sessions.push(result);
-    });
-    return sessions;
+    // Use pre-calculated sleepNightDate from each result (from folder name or heuristic fallback)
+    return nightlyResults.filter(result => 
+        (result.sleepNightDate || result.date) === sleepNightDate
+    );
 }
 
 // Populate night dropdown
