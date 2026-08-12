@@ -5,6 +5,7 @@ A comprehensive tool for analyzing multiple nights of ResMed PAP data to calcula
 ## Features
 
 - **Multi-Night Analysis**: Process multiple EDF files from different nights automatically
+- **Pre-Analysis Date Range**: Analyze only selected sleep nights from a full SD card to reduce processing time
 - **Complete Machine Analysis**: Extract machine type, IPAP, EPAP, pressure support, and PAP mode
 - **Weighted Averages**: Calculate proper weighted averages when multiple sessions exist per night
 - **Pressure Settings**: Analyze IPAP, EPAP, and pressure support trends alongside Glasgow Index
@@ -37,10 +38,15 @@ The tool analyzes 9 key components of flow limitations:
    - `multi_night_analyzer.html`
    - `EDFFile.js`
    - `FlowLimits.js`
+   - `DateRangeFilter.js`
 
 2. Open `multi_night_analyzer.html` in a modern web browser
 
-3. **For complete analysis**: Upload your entire ResMed SD card folder (recommended)
+3. Select your ResMed SD card folder or individual BRP files. The app scans the filenames and shows the available sleep-night span without reading the large BRP contents.
+
+4. Choose **All available nights**, **Last 30 days**, **Last 90 days**, or **Custom date range**, then click **Analyze**.
+
+5. **For complete analysis**: Upload your entire ResMed SD card folder (recommended)
    - **Includes**: Machine type, IPAP, EPAP, pressure support, PAP mode extraction
    - **Files analyzed**: DATALOG/*.edf, STR.edf, Identification.tgt, SETTINGS/*
    
@@ -93,13 +99,16 @@ Or in OSCAR backup directories:
 
 ### Web Interface Usage
 
-1. **File Selection**: 
-   - **Recommended**: Click "Choose Files" and select your entire SD card folder for complete analysis
-   - **Alternative**: Upload individual BRP.edf files for Glasgow Index analysis only
-   - The tool will automatically detect and process relevant files
+1. **File Selection**:
+   - **Recommended**: Click **Choose SD card** and select the card's root folder for complete analysis
+   - **Alternative**: Click **Choose BRP files** for Glasgow Index analysis only
+   - You can also drag and drop an SD card folder or individual files
+   - The tool detects the available sleep nights before analysis starts
 
-2. **Processing**: 
-   - Files are processed automatically after selection
+2. **Processing**:
+   - Choose **All available nights**, **Last 30 days**, **Last 90 days**, or **Custom date range** after selecting data
+   - The Analyze button shows how many nights will be processed
+   - Date-range selection happens before BRP file contents are read, so out-of-range breathing files do not consume analysis time
    - Machine identification and pressure settings are extracted first
    - Progress is shown with a progress bar and status updates
 
