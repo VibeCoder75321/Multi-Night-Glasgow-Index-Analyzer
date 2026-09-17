@@ -1446,13 +1446,13 @@ function createTrendsChart(nightlyData) {
         const startInput = document.getElementById('customStartDate');
         const endInput = document.getElementById('customEndDate');
         if (nightlyData && nightlyData.length > 0 && startInput && endInput) {
-            const dates = nightlyData.map(n => new Date(n.date)).sort((a,b)=>a-b);
+            const dates = nightlyData.map(n => n.date).sort();
             const min = dates[0];
             const max = dates[dates.length-1];
-            if (!startInput.value) startInput.value = formatDateISO(min);
-            if (!endInput.value) endInput.value = formatDateISO(max);
-            startInput.max = formatDateISO(max);
-            endInput.min = formatDateISO(min);
+            if (!startInput.value) startInput.value = min;
+            if (!endInput.value) endInput.value = max;
+            startInput.max = max;
+            endInput.min = min;
         }
         updateTrendsChart();
     }, 100);
@@ -1610,11 +1610,7 @@ function updateTrendsChart() {
                     ticks: {
                         maxTicksLimit: 12,
                         callback: function(value, index) {
-                            const date = new Date(this.getLabelForValue(value));
-                            return date.toLocaleDateString('en-US', { 
-                                month: 'short', 
-                                day: 'numeric' 
-                            });
+                            return formatDateLabel(this.getLabelForValue(value), false);
                         }
                     }
                 }
@@ -1786,11 +1782,7 @@ function updateComponentsChart() {
                     ticks: {
                         maxTicksLimit: 12,
                         callback: function(value, index) {
-                            const date = new Date(this.getLabelForValue(value));
-                            return date.toLocaleDateString('en-US', { 
-                                month: 'short', 
-                                day: 'numeric' 
-                            });
+                            return formatDateLabel(this.getLabelForValue(value), false);
                         }
                     }
                 }
@@ -1899,18 +1891,15 @@ function filterByDateRange(data, range) {
         const s = document.getElementById('customStartDate')?.value;
         const e = document.getElementById('customEndDate')?.value;
         if (!s || !e) return data;
-        const start = new Date(s);
-        const end = new Date(e);
-        // Include entire end day
-        end.setHours(23,59,59,999);
-        return data.filter(night => new Date(night.date) >= start && new Date(night.date) <= end);
+        // Sleep nights are calendar dates, not timestamps. ISO date strings
+        // compare chronologically and keep both endpoints inclusive in every zone.
+        return data.filter(night => night.date >= s && night.date <= e);
     }
     
     const days = parseInt(range);
-    const cutoffDate = new Date();
-    cutoffDate.setDate(cutoffDate.getDate() - days);
+    const cutoffDate = GlasgowFileSelection.addDays(formatDateISO(new Date()), -days);
     
-    return data.filter(night => new Date(night.date) >= cutoffDate);
+    return data.filter(night => night.date >= cutoffDate);
 }
 
 function applySmoothing(data, smoothing) {
@@ -1991,7 +1980,7 @@ function getDateRangeTitle(range) {
         const s = document.getElementById('customStartDate')?.value;
         const e = document.getElementById('customEndDate')?.value;
         if (s && e) {
-            return `(Custom: ${formatDateLabel(new Date(s))} to ${formatDateLabel(new Date(e))})`;
+            return `(Custom: ${formatDateLabel(s)} to ${formatDateLabel(e)})`;
         }
         return '(Custom)';
     }
@@ -2020,8 +2009,16 @@ function formatDateISO(d) {
     return `${y}-${m}-${day}`;
 }
 
-function formatDateLabel(d) {
-    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+function formatDateLabel(date, includeYear = true) {
+    if (!GlasgowFileSelection.isISODate(date)) return date;
+    // Parse and format in UTC together so a sleep-night date never shifts to
+    // the previous day when displayed in a browser west of UTC.
+    return new Date(`${date}T00:00:00Z`).toLocaleDateString('en-US', {
+        timeZone: 'UTC',
+        month: 'short',
+        day: 'numeric',
+        ...(includeYear ? { year: 'numeric' } : {})
+    });
 }
 
 function onDateRangeChange() {
