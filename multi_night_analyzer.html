@@ -459,9 +459,17 @@
 
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
             <h3 style="margin: 0;">Detailed Night-by-Night Results</h3>
-            <button onclick="exportNightlyCSV()" style="padding: 8px 16px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px;">
-                📊 Export to CSV
-            </button>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end;">
+                <button onclick="exportNightlyCSV()" style="padding: 8px 16px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px;">
+                    📊 Export to CSV
+                </button>
+                <button onclick="exportSavedResults()" style="padding: 8px 16px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px;">
+                    💾 Backup Cache
+                </button>
+                <button onclick="clearSavedResults()" style="padding: 8px 16px; background: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px;">
+                    Clear Cache
+                </button>
+            </div>
         </div>
         <table class="night-table" id="resultsTable">
             <thead>
@@ -539,6 +547,118 @@ let trendsChart = null;
 let componentsChart = null;
 let pendingFileSelection = null;
 let analysisInProgress = false;
+
+// Persistent cache of compact nightly/session results.
+// The large inspiration-level arrays are deliberately NOT persisted.
+const LOCAL_RESULTS_KEY = 'glasgowIndexResults_v1';
+
+function getFileCacheKey(file) {
+    return file._relativePath ||
+           file.webkitRelativePath ||
+           file.name;
+}
+
+function loadNightlyResults() {
+    try {
+        const raw = localStorage.getItem(LOCAL_RESULTS_KEY);
+        if (!raw) return [];
+
+        const parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed)) return [];
+
+        return parsed.map(result => {
+            const compact = { ...result };
+            delete compact.inspirations;
+            return compact;
+        });
+    } catch (error) {
+        console.error('Could not load saved Glasgow results:', error);
+        return [];
+    }
+}
+
+function saveNightlyResults(results) {
+    try {
+        const compactResults = results.map(result => {
+            const compact = { ...result };
+            delete compact.inspirations;
+            return compact;
+        });
+
+        localStorage.setItem(
+            LOCAL_RESULTS_KEY,
+            JSON.stringify(compactResults)
+        );
+    } catch (error) {
+        console.error('Could not save Glasgow results:', error);
+
+        if (error && error.name === 'QuotaExceededError') {
+            alert('The browser storage limit was reached while saving Glasgow results. Use "Backup Cache" and clear older data if necessary.');
+        }
+    }
+}
+
+function clearSavedResults() {
+    if (!confirm('Clear all saved Glasgow results from this browser? This cannot be undone unless you have a backup.')) {
+        return;
+    }
+
+    localStorage.removeItem(LOCAL_RESULTS_KEY);
+    nightlyResults = [];
+
+    if (trendsChart) {
+        trendsChart.destroy();
+        trendsChart = null;
+    }
+
+    if (componentsChart) {
+        componentsChart.destroy();
+        componentsChart = null;
+    }
+
+    document.getElementById('resultsSection').style.display = 'none';
+    document.getElementById('processingStatus').textContent = 'Saved Glasgow results cleared.';
+}
+
+function exportSavedResults() {
+    const results = loadNightlyResults();
+
+    if (results.length === 0) {
+        alert('There are no saved Glasgow results to back up.');
+        return;
+    }
+
+    const blob = new Blob(
+        [JSON.stringify(results, null, 2)],
+        { type: 'application/json' }
+    );
+
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+
+    link.href = url;
+    link.download = 'glasgow-index-results.json';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+
+    URL.revokeObjectURL(url);
+}
+
+function getCachedResultKeys() {
+    return new Set(
+        nightlyResults
+            .map(result => result.sourceKey)
+            .filter(Boolean)
+    );
+}
+
+// Restore compact historical results whenever the page loads.
+nightlyResults = loadNightlyResults();
+if (nightlyResults.length > 0) {
+    // Rebuild the results view from the compact cache after a refresh.
+    displayResults();
+}
 
 // File handling
 document.getElementById('fileInput').addEventListener('change', function (event) {
@@ -904,15 +1024,16 @@ function setAnalysisControlsDisabled(disabled) {
 }
 
 async function processFiles(brpFiles, identificationFiles = [], strFiles = []) {
-    nightlyResults = [];
-    
+    // Start with whatever has already been calculated and persisted.
+    nightlyResults = loadNightlyResults();
+
     const progressBar = document.getElementById('progressBar');
     const progressFill = document.getElementById('progressFill');
     const processingStatus = document.getElementById('processingStatus');
-    
+
     progressBar.style.display = 'block';
-    
-    // Parse machine identification first
+    progressFill.style.width = '0%';
+
     let machineInfo = null;
     if (identificationFiles.length > 0) {
         try {
@@ -923,8 +1044,7 @@ async function processFiles(brpFiles, identificationFiles = [], strFiles = []) {
             console.error('Error parsing machine identification:', error);
         }
     }
-    
-    // Parse STR file for pressure settings
+
     let pressureSettings = null;
     if (strFiles.length > 0) {
         try {
@@ -935,29 +1055,62 @@ async function processFiles(brpFiles, identificationFiles = [], strFiles = []) {
             console.error('Error parsing STR file:', error);
         }
     }
-    
-    for (let i = 0; i < brpFiles.length; i++) {
-        const file = brpFiles[i];
-        const progress = ((i + 1) / brpFiles.length) * 100;
+
+    const cachedKeys = getCachedResultKeys();
+    const filesToProcess = brpFiles.filter(file => {
+        const key = getFileCacheKey(file);
+
+        if (cachedKeys.has(key)) {
+            console.log(`Skipping already-analyzed file: ${key}`);
+            return false;
+        }
+
+        return true;
+    });
+
+    const skippedCount = brpFiles.length - filesToProcess.length;
+
+    if (skippedCount > 0) {
+        processingStatus.textContent =
+            `Skipping ${skippedCount} already-analyzed file${skippedCount === 1 ? '' : 's'}...`;
+        await new Promise(resolve => setTimeout(resolve, 100));
+    }
+
+    if (filesToProcess.length === 0) {
+        progressFill.style.width = '100%';
+    }
+
+    for (let i = 0; i < filesToProcess.length; i++) {
+        const file = filesToProcess[i];
+
+        const progress = ((i + 1) / filesToProcess.length) * 100;
         progressFill.style.width = progress + '%';
-        processingStatus.textContent = `Processing ${file.name}...`;
-        
+        processingStatus.textContent =
+            `Processing ${file.name} (${i + 1} of ${filesToProcess.length})...`;
+
         try {
             const result = await processFile(file, machineInfo, pressureSettings);
+
             if (result) {
                 nightlyResults.push(result);
+
+                // Save after EVERY successful file. A browser crash later
+                // will not lose the nights already completed.
+                saveNightlyResults(nightlyResults);
+
+                // Historical results do not need raw inspiration arrays.
+                delete result.inspirations;
             }
         } catch (error) {
             console.error(`Error processing ${file.name}:`, error);
         }
-        
-        // Small delay to allow UI to update
+
         await new Promise(resolve => setTimeout(resolve, 100));
     }
-    
+
     progressBar.style.display = 'none';
     processingStatus.textContent = '';
-    
+
     if (nightlyResults.length > 0) {
         displayResults();
     } else {
@@ -975,7 +1128,15 @@ function processFile(file, machineInfo = null, pressureSettings = null) {
                 // Pass folder date for accurate sleep night grouping
                 const detectedFolderDate = window.GlasgowFileSelection?.getFolderNightDate(file);
                 const folderDate = file._folderDate || (detectedFolderDate ? detectedFolderDate.replace(/-/g, '') : null);
-                const result = analyzeFile(arrayBuffer, file.name, machineInfo, pressureSettings, folderDate);
+                const sourceKey = getFileCacheKey(file);
+                const result = analyzeFile(
+                    arrayBuffer,
+                    file.name,
+                    machineInfo,
+                    pressureSettings,
+                    folderDate,
+                    sourceKey
+                );
                 resolve(result);
             } catch (error) {
                 console.error(`Error processing file ${file.name}:`, error);
@@ -991,7 +1152,14 @@ function processFile(file, machineInfo = null, pressureSettings = null) {
     });
 }
 
-function analyzeFile(arrayBuffer, fileName, machineInfo = null, pressureSettings = null, folderDate = null) {
+function analyzeFile(
+    arrayBuffer,
+    fileName,
+    machineInfo = null,
+    pressureSettings = null,
+    folderDate = null,
+    sourceKey = fileName
+) {
     // Parse EDF file
     const fileData = parseEDFFile(arrayBuffer);
     if (fileData.formatVersion !== "0") {
@@ -1069,6 +1237,7 @@ function analyzeFile(arrayBuffer, fileName, machineInfo = null, pressureSettings
     const finalRiseTime = easyOn ? 'N/A' : ((sessionExtras && sessionExtras.riseTime !== undefined) ? sessionExtras.riseTime : 'N/A');
     
     return {
+        sourceKey: sourceKey,
         fileName: fileName,
         date: date,
         time: time,
@@ -1289,7 +1458,13 @@ function renderMostRecentNightHeatmap(nightlyData) {
     
     // Collect sessions that belong to this sleep night
     const sessions = getSessionsForNight(mostRecentNightDate);
-    if (!sessions || sessions.length === 0) return;
+    if (!sessions || sessions.length === 0) {
+        const select = document.getElementById('nightSelect');
+        if (select) {
+            select.title = 'Heatmap data is only available for nights analyzed during this page session.';
+        }
+        return;
+    }
     
     // Sort by start time
     sessions.sort((a, b) => new Date(a.startDateTime) - new Date(b.startDateTime));
@@ -1332,10 +1507,13 @@ function renderMostRecentNightHeatmap(nightlyData) {
 // Helper: find sessions in nightlyResults that map to the given sleep night date
 function getSessionsForNight(sleepNightDate) {
     if (!nightlyResults || nightlyResults.length === 0) return [];
-    
-    // Use pre-calculated sleepNightDate from each result (from folder name or heuristic fallback)
-    return nightlyResults.filter(result => 
-        (result.sleepNightDate || result.date) === sleepNightDate
+
+    // Heatmaps require raw inspiration-level data. Historical results
+    // restored from localStorage intentionally do not contain that data.
+    return nightlyResults.filter(result =>
+        (result.sleepNightDate || result.date) === sleepNightDate &&
+        Array.isArray(result.inspirations) &&
+        result.inspirations.length > 0
     );
 }
 
@@ -1368,7 +1546,13 @@ function updateNightHeatmap() {
     
     // Build concatenated inspirations and render just like in most-recent function
     const sessions = getSessionsForNight(date);
-    if (!sessions || sessions.length === 0) return;
+    if (!sessions || sessions.length === 0) {
+        const select = document.getElementById('nightSelect');
+        if (select) {
+            select.title = 'Heatmap data is only available for nights analyzed during this page session.';
+        }
+        return;
+    }
     sessions.sort((a, b) => new Date(a.startDateTime) - new Date(b.startDateTime));
     let sampleOffset = 0;
     const concatenatedInspirations = [];
